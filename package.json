@@ -1,0 +1,15 @@
+{
+  "name": "pinewood-derby-server",
+  "version": "1.0.0",
+  "description": "Pinewood Derby race sensor server with live display",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "simulate": "node server.js --simulate"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "onoff": "^6.0.3"
+  }
+}

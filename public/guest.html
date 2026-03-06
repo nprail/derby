@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🏎 Derby Results</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: #0a0a0f;
+        color: #f0f0f0;
+        font-family: 'Barlow', sans-serif;
+        min-height: 100vh;
+      }
+      .font-display {
+        font-family: 'Teko', sans-serif;
+      }
+      .font-condensed {
+        font-family: 'Barlow Condensed', sans-serif;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(-40px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1.6);
+          opacity: 0;
+        }
+      }
+      @keyframes checkered-scroll {
+        from {
+          background-position: 0 0;
+        }
+        to {
+          background-position: 40px 0;
+        }
+      }
+      @keyframes flash-gold {
+        0%,
+        100% {
+          background: #1a1a2e;
+        }
+        50% {
+          background: #2a2000;
+        }
+      }
+      @keyframes spin-slow {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes winner-pop {
+        0% {
+          transform: scale(0.8);
+          opacity: 0;
+        }
+        60% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      .slide-in {
+        animation: slideIn 0.4s ease both;
+      }
+      .winner-pop {
+        animation: winner-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      }
+
+      .checkered-bar {
+        background-image: repeating-linear-gradient(
+          90deg,
+          #fff 0px,
+          #fff 20px,
+          #000 20px,
+          #000 40px
+        );
+        animation: checkered-scroll 1s linear infinite;
+      }
+
+      .lane-card {
+        transition: all 0.3s ease;
+      }
+      .armed-pulse {
+        animation: pulse-ring 1.2s ease-out infinite;
+      }
+
+      .track-stripe {
+        background: repeating-linear-gradient(
+          90deg,
+          transparent 0px,
+          transparent 18px,
+          rgba(255, 255, 255, 0.03) 18px,
+          rgba(255, 255, 255, 0.03) 20px
+        );
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const LANE_PALETTES = {
+        Red: {
+          bg: '#1a0808',
+          border: '#dc2626',
+          text: '#fca5a5',
+          glow: 'rgba(220,38,38,0.4)',
+          dot: '#ef4444',
+        },
+        Blue: {
+          bg: '#08101a',
+          border: '#2563eb',
+          text: '#93c5fd',
+          glow: 'rgba(37,99,235,0.4)',
+          dot: '#3b82f6',
+        },
+        Yellow: {
+          bg: '#1a1608',
+          border: '#ca8a04',
+          text: '#fde68a',
+          glow: 'rgba(202,138,4,0.4)',
+          dot: '#eab308',
+        },
+        Green: {
+          bg: '#081a0c',
+          border: '#16a34a',
+          text: '#86efac',
+          glow: 'rgba(22,163,74,0.4)',
+          dot: '#22c55e',
+        },
+        Purple: {
+          bg: '#110818',
+          border: '#9333ea',
+          text: '#d8b4fe',
+          glow: 'rgba(147,51,234,0.4)',
+          dot: '#a855f7',
+        },
+        Orange: {
+          bg: '#1a0e08',
+          border: '#ea580c',
+          text: '#fed7aa',
+          glow: 'rgba(234,88,12,0.4)',
+          dot: '#f97316',
+        },
+        Pink: {
+          bg: '#1a0812',
+          border: '#db2777',
+          text: '#fbcfe8',
+          glow: 'rgba(219,39,119,0.4)',
+          dot: '#ec4899',
+        },
+        White: {
+          bg: '#141418',
+          border: '#d1d5db',
+          text: '#f9fafb',
+          glow: 'rgba(209,213,219,0.4)',
+          dot: '#e5e7eb',
+        },
+      }
+      const COLOR_NAMES = Object.keys(LANE_PALETTES)
+    </script>
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React
+
+      const PLACE_LABELS = ['1ST', '2ND', '3RD', '4TH']
+
+      function PlaceCard({ entry, place, laneColors, isNew }) {
+        const colorName = laneColors[entry.lane] || 'White'
+        const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+        const isWinner = place === 0
+
+        return (
+          <div
+            className={`lane-card relative rounded-2xl border-2 overflow-hidden ${isNew ? (isWinner ? 'winner-pop' : 'slide-in') : ''}`}
+            style={{
+              animationDelay: `${place * 0.08}s`,
+              background: palette.bg,
+              borderColor: palette.border,
+              boxShadow: isWinner
+                ? `0 0 40px ${palette.glow}, 0 0 80px ${palette.glow}40`
+                : `0 0 12px ${palette.glow}50`,
+            }}
+          >
+            {isWinner && (
+              <div className="checkered-bar absolute top-0 left-0 right-0 h-1.5 opacity-60" />
+            )}
+
+            <div className="track-stripe absolute inset-0 opacity-100 pointer-events-none" />
+
+            <div className="relative flex items-center gap-4 px-5 py-4">
+              {/* Place badge */}
+              <div className="flex-shrink-0 text-center w-16">
+                <div
+                  className="font-display text-5xl leading-none"
+                  style={{ color: palette.text }}
+                >
+                  {PLACE_LABELS[place]}
+                </div>
+                {isWinner && <div className="text-xl mt-0.5">🏆</div>}
+              </div>
+
+              {/* Divider */}
+              <div
+                className="w-px self-stretch opacity-30"
+                style={{ background: palette.border }}
+              />
+
+              {/* Lane info */}
+              <div className="flex-1">
+                <div
+                  className="font-condensed text-xs font-semibold tracking-widest uppercase opacity-50 mb-0.5"
+                  style={{ color: palette.text }}
+                >
+                  Lane {entry.lane}
+                </div>
+                <div
+                  className="font-display text-4xl leading-none font-semibold"
+                  style={{ color: palette.text }}
+                >
+                  {colorName}
+                </div>
+              </div>
+
+              {/* Gap time */}
+              {place > 0 && (
+                <div className="text-right flex-shrink-0">
+                  <div
+                    className="font-condensed text-xs tracking-widest uppercase opacity-40 mb-0.5"
+                    style={{ color: palette.text }}
+                  >
+                    behind
+                  </div>
+                  <div
+                    className="font-display text-2xl"
+                    style={{ color: palette.text }}
+                  >
+                    +{entry.gapMs.toFixed(0)}
+                    <span className="text-sm opacity-60"> ms</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      }
+
+      function WaitingState({ status }) {
+        return (
+          <div className="flex flex-col items-center justify-center py-20 gap-6">
+            {status === 'armed' ? (
+              <>
+                <div className="relative">
+                  <div className="w-20 h-20 rounded-full border-2 border-green-500 flex items-center justify-center">
+                    <div className="w-4 h-4 rounded-full bg-green-400" />
+                  </div>
+                  <div className="armed-pulse absolute inset-0 rounded-full border-2 border-green-400 opacity-60" />
+                </div>
+                <div className="font-display text-4xl tracking-widest text-green-400">
+                  READY
+                </div>
+                <div className="font-condensed text-sm tracking-widest uppercase text-green-600">
+                  Sensors Armed — Waiting for Cars
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-display text-6xl text-white/10">🏁</div>
+                <div className="font-display text-3xl tracking-widest text-white/30">
+                  STANDBY
+                </div>
+                <div className="font-condensed text-xs tracking-widest uppercase text-white/20">
+                  Waiting for next heat
+                </div>
+              </>
+            )}
+          </div>
+        )
+      }
+
+      function HistoryRow({ item, laneColors }) {
+        return (
+          <div className="flex items-center gap-3 py-2 border-b border-white/5">
+            <span className="font-condensed text-xs text-white/30 w-14">
+              Heat {item.heat}
+            </span>
+            <div className="flex gap-1.5 flex-1">
+              {item.finishOrder.map((e) => (
+                <span
+                  key={e.lane}
+                  className="font-condensed text-xs px-2 py-0.5 rounded"
+                  style={{
+                    background: (
+                      LANE_PALETTES[laneColors[e.lane]] || LANE_PALETTES.White
+                    ).bg,
+                    color: (
+                      LANE_PALETTES[laneColors[e.lane]] || LANE_PALETTES.White
+                    ).text,
+                    border: `1px solid ${(LANE_PALETTES[laneColors[e.lane]] || LANE_PALETTES.White).border}60`,
+                  }}
+                >
+                  {laneColors[e.lane] || `L${e.lane}`}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      }
+
+      function App() {
+        const [state, setState] = useState(null)
+        const [isNew, setIsNew] = useState(false)
+        const wsRef = useRef(null)
+
+        useEffect(() => {
+          function connect() {
+            const ws = new WebSocket(`ws://${location.host}`)
+            wsRef.current = ws
+            ws.onmessage = (e) => {
+              const msg = JSON.parse(e.data)
+              setState(msg.state)
+              if (msg.type === 'finished') {
+                setIsNew(true)
+                setTimeout(() => setIsNew(false), 2000)
+              }
+            }
+            ws.onclose = () => setTimeout(connect, 2000)
+          }
+          connect()
+          return () => wsRef.current?.close()
+        }, [])
+
+        if (!state)
+          return (
+            <div className="flex items-center justify-center min-h-screen">
+              <div className="font-display text-2xl text-white/20 tracking-widest">
+                CONNECTING…
+              </div>
+            </div>
+          )
+
+        const { finishOrder, laneColors, status, heat, history } = state
+        const showResults = status === 'finished' && finishOrder.length > 0
+
+        return (
+          <div className="relative min-h-screen flex flex-col">
+            {/* Header */}
+            <header className="relative border-b border-white/10 bg-black/40 backdrop-blur px-6 py-4 flex items-center justify-between">
+              <div>
+                <div className="font-display text-4xl tracking-widest leading-none text-white">
+                  PINEWOOD DERBY
+                </div>
+                <div className="font-condensed text-xs tracking-widest uppercase text-white/30 mt-0.5">
+                  Live Results Display
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-condensed text-xs uppercase tracking-widest text-white/30">
+                  Heat
+                </div>
+                <div className="font-display text-5xl text-white leading-none">
+                  {heat}
+                </div>
+              </div>
+            </header>
+
+            {/* Main results */}
+            <main className="flex-1 px-4 py-6 max-w-2xl mx-auto w-full">
+              {showResults ? (
+                <div className="flex flex-col gap-3">
+                  {finishOrder.map((entry, i) => (
+                    <PlaceCard
+                      key={entry.lane}
+                      entry={entry}
+                      place={i}
+                      laneColors={laneColors}
+                      isNew={isNew}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <WaitingState status={status} />
+              )}
+            </main>
+
+            {/* History */}
+            {history.length > 0 && (
+              <div className="border-t border-white/5 px-6 py-4 max-w-2xl mx-auto w-full">
+                <div className="font-condensed text-xs uppercase tracking-widest text-white/20 mb-3">
+                  Recent Heats
+                </div>
+                {history.slice(0, 5).map((item) => (
+                  <HistoryRow
+                    key={item.heat}
+                    item={item}
+                    laneColors={laneColors}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>
