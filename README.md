@@ -68,6 +68,14 @@ node server.js --simulate --lanes 2
 | `http://localhost:3000/` | **Guest display** — full-screen live results, designed for a projector or TV |
 | `http://localhost:3000/manage` | **Track manager** — arm/reset controls and lane color configuration |
 
+### Guest Display (`/`)
+
+![Guest display showing live race results with color-coded lane cards](docs/screenshots/guest.png)
+
+### Track Manager (`/manage`)
+
+![Track manager showing arm/reset controls, lane color configuration, and heat results](docs/screenshots/manage.png)
+
 ---
 
 ## REST API
