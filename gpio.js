@@ -33,8 +33,8 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
   function setup() {
     if (opts.simulate) return
     try {
-      const { Gpio, configurePigpio } = require('pigpio')
-      configurePigpio({ gpioClock: 1 }) // 1μs sample rate
+      const { Gpio, configureClock } = require('pigpio')
+      configureClock(1, 0) // 1μs sample rate
       const newSensors = {}
       const pins = Object.fromEntries(
         Object.entries(DEFAULT_GPIO_PINS).filter(
