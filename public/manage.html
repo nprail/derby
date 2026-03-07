@@ -445,6 +445,18 @@
           setLoading('')
         }
 
+        async function handleResetRace() {
+          if (
+            !confirm(
+              'Reset the entire race? This will clear all history and return to Heat 1.',
+            )
+          )
+            return
+          setLoading('reset-race')
+          await api('/api/reset-race', {})
+          setLoading('')
+        }
+
         async function handleColorSave(lane, color) {
           const colors = { [lane]: color }
           await api('/api/colors', { colors })
@@ -508,6 +520,21 @@
                       }}
                     >
                       {loading === 'reset' ? 'RESETTING…' : '↺  RESET HEAT'}
+                    </button>
+                    <button
+                      onClick={handleResetRace}
+                      disabled={loading === 'reset-race'}
+                      className="w-full py-1.5 rounded-lg font-condensed text-xs uppercase tracking-widest transition-all disabled:opacity-30"
+                      style={{
+                        background: 'rgba(239,68,68,0.05)',
+                        border: '1px solid rgba(239,68,68,0.2)',
+                        color: '#f87171',
+                        opacity: loading === 'reset-race' ? 0.3 : 0.6,
+                      }}
+                    >
+                      {loading === 'reset-race'
+                        ? 'Resetting…'
+                        : '⚠ Reset Entire Race'}
                     </button>
                   </div>
                 </div>

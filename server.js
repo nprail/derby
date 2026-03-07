@@ -162,6 +162,15 @@ app.post('/api/reset', (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/reset-race', (req, res) => {
+  sensorManager.reset()
+  state.heat = 1
+  state.history = []
+  saveConfig()
+  broadcast('reset')
+  res.json({ ok: true })
+})
+
 app.post('/api/colors', (req, res) => {
   const { colors } = req.body
   if (!colors) return res.status(400).json({ error: 'Missing colors' })
