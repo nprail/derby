@@ -4,6 +4,16 @@ A real-time race timing and display server for Pinewood Derby events. Runs on a 
 
 ---
 
+## Screenshots
+
+### Guest Display (`/`)
+![Guest display showing live race results with colored lane cards](docs/screenshot-guest.png)
+
+### Track Manager (`/manage`)
+![Track manager showing controls, lane color configuration, and heat results](docs/screenshot-manage.png)
+
+---
+
 ## Features
 
 - **Live leaderboard** — guest display auto-updates the moment each car crosses the line
