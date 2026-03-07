@@ -24,24 +24,16 @@ node --version   # should print v22.x.x
 
 ## 3. Install pigpio and Enable GPIO Permissions
 
-The server uses the `pigpio` library, which uses the hardware GPIO interface and works correctly on Raspberry Pi 4. First install the system library:
+The server uses the `pigpio` library, which uses the hardware GPIO interface. First install the system library:
 
 ```bash
 sudo apt-get install -y pigpio
 ```
 
-`pigpio` requires elevated privileges to access the GPIO hardware. The recommended approach is to run the server via `sudo`, or start the `pigpiod` daemon and add your user to the `gpio` group:
+`pigpio` requires elevated privileges to access the GPIO hardware. Run the server as root:
 
 ```bash
-# Option A – run as root (simplest)
 sudo npm start
-
-# Option B – use the pigpio daemon
-sudo systemctl enable pigpiod
-sudo systemctl start pigpiod
-sudo usermod -aG gpio $USER
-# Log out and back in (or reboot), then run normally:
-npm start
 ```
 
 ---
@@ -49,7 +41,7 @@ npm start
 ## 4. Clone and Install
 
 ```bash
-git clone <repo> derby
+git clone https://github.com/nprail/derby.git derby
 cd derby
 npm install
 ```
@@ -81,6 +73,7 @@ npm start
 ```
 
 The server will print the detected pin assignments on startup:
+
 ```
   Lane 1 → GPIO 17
   Lane 2 → GPIO 27
@@ -98,7 +91,7 @@ Create a service file so the server starts automatically after a reboot:
 sudo nano /etc/systemd/system/derby.service
 ```
 
-Paste the following (adjust `User` and `WorkingDirectory` to match your setup):
+Paste the following (adjust `WorkingDirectory` to match your setup):
 
 ```ini
 [Unit]
@@ -107,7 +100,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
+User=root
 WorkingDirectory=/home/pi/derby
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
@@ -127,6 +120,7 @@ sudo systemctl status derby
 ```
 
 View logs at any time with:
+
 ```bash
 journalctl -u derby -f
 ```

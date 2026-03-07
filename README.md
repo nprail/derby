@@ -22,14 +22,14 @@ A real-time race timing and display server for Pinewood Derby events. Runs on a 
 | Node.js | ≥ 18 |
 | express | ^4.18 |
 | ws | ^8 |
-| onoff | ^6 *(Raspberry Pi GPIO only)* |
+| pigpio | ^3 *(Raspberry Pi GPIO only)* |
 
 ---
 
 ## Installation
 
 ```bash
-git clone <repo>
+git clone https://github.com/nprail/derby.git
 cd derby
 npm install
 ```
