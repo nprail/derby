@@ -1,6 +1,6 @@
 # 🏎 Pinewood Derby Race Server
 
-A real-time race timing and display server for Pinewood Derby events. Runs on a Raspberry Pi (or any machine), reads finish-line GPIO sensors, and broadcasts live results to any number of connected displays over WebSocket.
+A real-time race timing and display system for Pinewood Derby events. An ESP32 sensor node reads the finish-line sensors with hardware-interrupt precision, and a Node.js server manages race state and broadcasts live results to any number of connected displays over WebSocket.
 
 ---
 
@@ -8,21 +8,28 @@ A real-time race timing and display server for Pinewood Derby events. Runs on a 
 
 - **Live leaderboard** — guest display auto-updates the moment each car crosses the line
 - **Track manager** — arm sensors, reset heats, and configure lane colors from any browser
-- **Millisecond-accurate timing** — uses `process.hrtime.bigint()` for high-resolution gaps
+- **Microsecond-accurate timing** — ESP32 hardware interrupts (`esp_timer_get_time()`) record timestamps before any network call; WiFi latency has zero effect on results
 - **Simulation mode** — develop and demo without any hardware
 - **CSV logging** — every heat result is appended to `derby_results.csv`
-- **Configurable lane count** — supports 1–4 lanes out of the box (extend `DEFAULT_GPIO_PINS` in `gpio.js` for more)
+- **Configurable lane count** — supports 1–4 lanes out of the box (extend `LANE_PINS` in the ESP32 sketch for more)
 
 ---
 
 ## Requirements
+
+**Node.js server**
 
 | Dependency | Version |
 |---|---|
 | Node.js | ≥ 18 |
 | express | ^4.18 |
 | ws | ^8 |
-| pigpio | ^3 *(Raspberry Pi GPIO only)* |
+
+**ESP32 sensor node** (Arduino libraries)
+
+| Library | Version |
+|---|---|
+| ArduinoJson *(Benoit Blanchon)* | ^6.21 |
 
 ---
 
@@ -115,6 +122,17 @@ Clears results and advances to the next heat number.
 { "ok": true }
 ```
 
+### `POST /api/trigger`
+Called by the ESP32 sensor node when a car crosses the finish line. `timestamp_us` is the raw `esp_timer_get_time()` value from the ESP32, sent as a string to preserve 64-bit precision. The server computes `gapMs` from the difference between trigger timestamps, so WiFi latency has no effect on results. Returns `400` if the race is not armed or the lane is invalid.
+
+```json
+// Request body
+{ "lane": 2, "timestamp_us": "3482910" }
+
+// Response
+{ "ok": true }
+```
+
 ### `POST /api/colors`
 Updates one or more lane colors.
 
@@ -152,36 +170,25 @@ ws.onmessage = (e) => {
 
 ---
 
-## Hardware Setup (Raspberry Pi)
+## Hardware Setup
 
-For a full Raspberry Pi setup walkthrough (Node.js installation, GPIO permissions, systemd auto-start), see [docs/SETUP.md](docs/SETUP.md).
+The system has two components:
 
-### Default GPIO Pin Mapping
+1. **Node.js server** — runs on any machine (laptop, Pi, etc.) on the local network. See [docs/SETUP.md](docs/SETUP.md) for installation and systemd auto-start.
+2. **ESP32 sensor node** — reads the finish-line sensors and POSTs timing data to the server. See [docs/SETUP.md](docs/SETUP.md#part-2--esp32-sensor-node) for flashing instructions.
 
-| Lane | BCM Pin |
-|---|---|
-| 1 | GPIO 17 |
-| 2 | GPIO 27 |
-| 3 | GPIO 22 |
-| 4 | GPIO 23 |
+### Default ESP32 Pin Mapping
 
-To change pin assignments, edit `DEFAULT_GPIO_PINS` in [`gpio.js`](gpio.js).
+| Lane | ESP32 GPIO |
+|------|------------|
+| 1    | GPIO 25    |
+| 2    | GPIO 26    |
+| 3    | GPIO 32    |
+| 4    | GPIO 33    |
 
-### Wiring
+To change pin assignments, edit `LANE_PINS` in [`esp32/derby_sensor/derby_sensor.ino`](esp32/derby_sensor/derby_sensor.ino).
 
-Each finish-line sensor should pull the GPIO pin **low** (falling edge) when triggered:
-
-```
-3.3V ──[sensor]── GPIO pin
-                       │
-                    10kΩ pull-up (or use internal)
-                       │
-                      GND
-```
-
-The server uses `onoff` with a **50 ms debounce** to ignore noise.
-
-For full connector and wiring details, see [docs/WIRING.md](docs/WIRING.md).
+For full wiring details and sensor circuit diagrams, see [docs/WIRING.md](docs/WIRING.md).
 
 ---
 
@@ -209,14 +216,18 @@ Eight colors are available. Configure them per-lane from the `/manage` page.
 
 ```
 derby/
-├── server.js        # HTTP server, WebSocket, API routes, race state, CSV logging
-├── gpio.js          # GPIO sensor management, race timing, simulation
+├── server.js          # HTTP server, WebSocket, API routes, race state, CSV logging
+├── gpio.js            # Race state management and simulation logic
+├── esp32/
+│   ├── platformio.ini # PlatformIO build config
+│   └── derby_sensor/
+│       └── derby_sensor.ino  # ESP32 sketch: ISR timing + WiFi reporting
 ├── public/
-│   ├── guest.html   # Guest-facing live results display (React)
-│   └── manage.html  # Track manager UI (React)
+│   ├── guest.html     # Guest-facing live results display
+│   └── manage.html    # Track manager UI
 ├── docs/
-│   ├── SETUP.md     # Raspberry Pi setup guide
-│   └── WIRING.md    # 2×5 IDC connector wiring guide
+│   ├── SETUP.md       # Server + ESP32 setup guide
+│   └── WIRING.md      # ESP32 pin mapping and sensor circuit
 ├── derby_results.csv  # Auto-created on first run
 └── package.json
 ```

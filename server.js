@@ -7,9 +7,10 @@
  *   GET /manage    → Track manager page (reset, configure lane colors)
  *
  * WebSocket broadcasts race state to all connected clients in real time.
+ * Physical GPIO sensing is handled by the ESP32 sensor node (see esp32/).
  *
  * Install:
- *   npm install express ws onoff
+ *   npm install express ws
  *
  * Usage:
  *   node server.js
@@ -162,6 +163,23 @@ app.post('/api/reset', (req, res) => {
   res.json({ ok: true })
 })
 
+// Called by the ESP32 sensor node on every finish-line trigger.
+// { lane: number, timestamp_us: string }  — timestamp_us is the raw
+// esp_timer_get_time() value sent as a string to preserve 64-bit precision.
+// The server computes gapMs from the difference between trigger timestamps,
+// so WiFi latency has no effect on race results.
+app.post('/api/trigger', (req, res) => {
+  const { lane, timestamp_us } = req.body
+  if (state.status !== 'armed')
+    return res.status(400).json({ error: 'Not armed' })
+  const laneNum = parseInt(lane)
+  if (!laneNum || laneNum < 1 || laneNum > state.numLanes)
+    return res.status(400).json({ error: 'Invalid lane' })
+  const tsUs = timestamp_us !== undefined ? BigInt(timestamp_us) : null
+  sensorManager.triggerLane(laneNum, tsUs)
+  res.json({ ok: true })
+})
+
 app.post('/api/reset-race', (req, res) => {
   sensorManager.reset()
   state.heat = 1
@@ -188,19 +206,15 @@ wss.on('connection', (ws) => {
 })
 
 initLog()
-sensorManager.setup()
 
 server.listen(opts.port, () => {
   console.log(`\n🏎  Pinewood Derby Server running`)
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
   console.log(
-    `   Mode          : ${opts.simulate ? 'SIMULATION' : 'GPIO LIVE'}`,
+    `   Mode          : ${opts.simulate ? 'SIMULATION' : 'ESP32 SENSOR'}`,
   )
   console.log()
 })
 
-process.on('SIGINT', () => {
-  sensorManager.cleanup()
-  process.exit(0)
-})
+process.on('SIGINT', () => process.exit(0))

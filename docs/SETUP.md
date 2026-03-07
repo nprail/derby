@@ -1,44 +1,36 @@
-# Raspberry Pi Setup Guide
+# Setup Guide
 
-This guide covers everything needed to run the Pinewood Derby server on a Raspberry Pi from a fresh Raspberry Pi OS installation.
-
----
-
-## 1. Install Raspberry Pi OS
-
-Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/) to flash **Raspberry Pi OS Lite (64-bit)** onto your SD card. Enable SSH and set a hostname/username in the imager's advanced options before flashing.
+This guide covers everything needed to run the Pinewood Derby system: a Node.js server (runs on any machine on the local network) and an ESP32 sensor node that handles all finish-line GPIO sensing.
 
 ---
 
-## 2. Install Node.js ≥ 18
+## Architecture
 
-Raspberry Pi OS ships with an outdated version of Node.js. Install a current version via NodeSource:
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node --version   # should print v22.x.x
+```
+Finish-line sensors
+        │  (falling-edge interrupt)
+        ▼
+   ESP32 sensor node          ← records µs-accurate timestamps via hardware ISR
+        │  POST /api/trigger  ← sends pre-computed gapMs over WiFi
+        ▼
+   Node.js server             ← manages race state, serves web UI
+        │  WebSocket
+        ▼
+   Browser (guest / manage)
 ```
 
----
-
-## 3. Install pigpio and Enable GPIO Permissions
-
-The server uses the `pigpio` library, which uses the hardware GPIO interface. First install the system library:
-
-```bash
-sudo apt-get install -y pigpio
-```
-
-`pigpio` requires elevated privileges to access the GPIO hardware. Run the server as root:
-
-```bash
-sudo npm start
-```
+Because the ESP32 records timestamps in hardware before any network call is made, WiFi latency has no effect on race timing accuracy.
 
 ---
 
-## 4. Clone and Install
+## Part 1 — Node.js Server
+
+### 1. Install Node.js ≥ 18
+
+Download from [nodejs.org](https://nodejs.org/) or use a version manager
+
+
+### 2. Clone and Install
 
 ```bash
 git clone https://github.com/nprail/derby.git derby
@@ -46,9 +38,7 @@ cd derby
 npm install
 ```
 
----
-
-## 5. Test with Simulation Mode
+### 3. Test with Simulation Mode
 
 Before connecting any hardware, verify everything works:
 
@@ -56,34 +46,17 @@ Before connecting any hardware, verify everything works:
 npm run simulate
 ```
 
-Open `http://<pi-ip>:3000/` in a browser — you should see the guest display and live heat results.
+Open `http://localhost:3000/` — you should see the guest display and live simulated heat results.
 
----
-
-## 6. Wire the Sensors
-
-Connect your finish-line sensors to the GPIO pins via the 2×5 IDC connector. See [WIRING.md](WIRING.md) for the full connector pinout and continuity check procedure.
-
----
-
-## 7. Run in GPIO Mode
+### 4. Run in Live Mode
 
 ```bash
 npm start
 ```
 
-The server will print the detected pin assignments on startup:
+The server listens for ESP32 trigger events on `POST /api/trigger` and broadcasts results to all connected browsers via WebSocket.
 
-```
-  Lane 1 → GPIO 17
-  Lane 2 → GPIO 27
-  Lane 3 → GPIO 22
-  Lane 4 → GPIO 23
-```
-
----
-
-## 8. Auto-Start on Boot (systemd)
+### 5. Auto-Start on Boot (systemd)
 
 Create a service file so the server starts automatically after a reboot:
 
@@ -91,7 +64,7 @@ Create a service file so the server starts automatically after a reboot:
 sudo nano /etc/systemd/system/derby.service
 ```
 
-Paste the following (adjust `WorkingDirectory` to match your setup):
+Paste the following (adjust `WorkingDirectory` and `User` to match your setup):
 
 ```ini
 [Unit]
@@ -100,7 +73,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=pi
 WorkingDirectory=/home/pi/derby
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
@@ -124,3 +97,39 @@ View logs at any time with:
 ```bash
 journalctl -u derby -f
 ```
+
+---
+
+## Part 2 — ESP32 Sensor Node
+
+The ESP32 sketch lives in `esp32/derby_sensor/derby_sensor.ino`. It can be built with the Arduino IDE or PlatformIO.
+
+### Option A — Arduino IDE
+
+1. Install [Arduino IDE 2](https://www.arduino.cc/en/software)
+2. Add ESP32 board support: **File → Preferences → Additional boards manager URLs** →
+   `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
+3. **Tools → Board → ESP32 Arduino → ESP32 Dev Module**
+4. Install the library via **Sketch → Include Library → Manage Libraries**:
+   - `ArduinoJson` by Benoit Blanchon
+5. Open `esp32/derby_sensor/derby_sensor.ino`
+6. Edit the configuration section at the top of the file:
+   ```cpp
+   #define WIFI_SSID      "YOUR_WIFI_SSID"
+   #define WIFI_PASSWORD  "YOUR_WIFI_PASSWORD"
+   #define SERVER_HOST    "192.168.1.100"  // IP of the machine running server.js
+   #define SERVER_PORT    3000
+   ```
+7. Select the correct **Port** and click **Upload**
+
+### Option B — PlatformIO
+
+```bash
+cd esp32
+pio run --target upload
+pio device monitor   # view serial output
+```
+
+### Wiring the sensors
+
+See [WIRING.md](WIRING.md) for the full ESP32 pinout and sensor circuit.

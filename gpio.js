@@ -1,7 +1,10 @@
-// gpio.js — GPIO sensor management and race logic
-
-const DEFAULT_GPIO_PINS = { 1: 17, 2: 27, 3: 22, 4: 23 }
-const DEBOUNCE_MS = 50
+// gpio.js — Race state management
+//
+// Physical GPIO sensing is handled entirely by the ESP32 sensor node.
+// The ESP32 records hardware timestamps (esp_timer_get_time, 1 µs resolution)
+// and POSTs { lane, timestamp_us } on every trigger.  The server computes
+// gapMs = (timestamp_i − timestamp_0) / 1000 from those values, so timing
+// accuracy is determined by the ESP32 clock — not network latency.
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
@@ -16,46 +19,18 @@ function shuffle(arr) {
 }
 
 /**
- * Creates a sensor manager that handles GPIO inputs and race simulation.
+ * Creates a sensor manager that tracks race state.
  *
  * @param {object}   deps            - Dependencies
  * @param {object}   deps.opts       - Parsed CLI options (lanes, timeout, simulate)
  * @param {object}   deps.state      - Shared race state object (mutated in place)
  * @param {Function} deps.broadcast  - WebSocket broadcast function (type, payload?)
  * @param {Function} deps.onFinish   - Called when a heat completes (e.g. for CSV logging)
- * @returns {{ setup, arm, reset, cleanup }}
+ * @returns {{ arm, reset, triggerLane }}
  */
 function createSensorManager({ opts, state, broadcast, onFinish }) {
-  let sensors = null
   let heatTimer = null
   const triggered = new Set()
-
-  function setup() {
-    if (opts.simulate) return
-    try {
-      const { Gpio, configureClock } = require('pigpio')
-      configureClock(1, 0) // 1μs sample rate
-      const newSensors = {}
-      const pins = Object.fromEntries(
-        Object.entries(DEFAULT_GPIO_PINS).filter(
-          ([l]) => parseInt(l) <= opts.lanes,
-        ),
-      )
-      for (const [lane, pin] of Object.entries(pins)) {
-        const s = new Gpio(pin, {
-          mode: Gpio.INPUT,
-          pullUpDown: Gpio.PUD_UP,
-          alert: true,
-        })
-        s.glitchFilter(DEBOUNCE_MS * 1000) // pigpio uses microseconds
-        newSensors[lane] = s
-        console.log(`  Lane ${lane} → GPIO ${pin}`)
-      }
-      sensors = newSensors
-    } catch (err) {
-      console.warn('GPIO unavailable:', err.message, '— use --simulate')
-    }
-  }
 
   function arm() {
     triggered.clear()
@@ -68,16 +43,6 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
       return
     }
 
-    if (!sensors) return
-
-    for (const [lane, sensor] of Object.entries(sensors)) {
-      if (parseInt(lane) > opts.lanes) continue
-      sensor.on('alert', (level) => {
-        if (level !== 0 || state.status !== 'armed') return // level 0 = falling edge
-        _handleTrigger(parseInt(lane))
-      })
-    }
-
     heatTimer = setTimeout(() => {
       if (state.status === 'armed') _finishHeat()
     }, opts.timeout * 1000)
@@ -85,7 +50,6 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
 
   function reset() {
     clearTimeout(heatTimer)
-    if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
     state._startTime = null
     triggered.clear()
     state.heat++
@@ -94,19 +58,25 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
     broadcast('reset')
   }
 
-  function cleanup() {
-    if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
-  }
-
   // ── Private ────────────────────────────────────────────────────────────────
 
-  function _handleTrigger(lane) {
+  // timestampUs: BigInt µs value from esp_timer_get_time() on the ESP32.
+  // The server computes gapMs relative to the first trigger's timestamp so
+  // that timing accuracy depends only on the ESP32 hardware clock.
+  // Falls back to server-side hrtime in --simulate mode.
+  function _handleTrigger(lane, timestampUs = null) {
     if (triggered.has(lane) || state.status !== 'armed') return
     triggered.add(lane)
 
-    const now = process.hrtime.bigint()
-    const startTime = state._startTime ?? (state._startTime = now)
-    const gapMs = Number(now - startTime) / 1_000_000
+    let gapMs
+    if (timestampUs !== null) {
+      const ref = state._startTime ?? (state._startTime = timestampUs)
+      gapMs = Number(timestampUs - ref) / 1000
+    } else {
+      const now = process.hrtime.bigint()
+      const startTime = state._startTime ?? (state._startTime = now)
+      gapMs = Number(now - startTime) / 1_000_000
+    }
 
     state.finishOrder.push({ lane, gapMs })
     broadcast('trigger', { lane, gapMs, place: state.finishOrder.length })
@@ -117,7 +87,6 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
 
   function _finishHeat() {
     clearTimeout(heatTimer)
-    if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
     state._startTime = null
     state.status = 'finished'
 
@@ -145,7 +114,7 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
     }
   }
 
-  return { setup, arm, reset, cleanup }
+  return { arm, reset, triggerLane: _handleTrigger }
 }
 
-module.exports = { createSensorManager, DEFAULT_GPIO_PINS }
+module.exports = { createSensorManager }
