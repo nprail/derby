@@ -22,18 +22,26 @@ node --version   # should print v22.x.x
 
 ---
 
-## 3. Enable GPIO Permissions
+## 3. Install pigpio and Enable GPIO Permissions
 
-`onoff` accesses `/sys/class/gpio` and requires your user to be in the `gpio` group. Add yourself and re-login:
+The server uses the `pigpio` library, which uses the hardware GPIO interface and works correctly on Raspberry Pi 4. First install the system library:
 
 ```bash
-sudo usermod -aG gpio $USER
-# Log out and back in (or reboot) for the group change to take effect
+sudo apt-get install -y pigpio
 ```
 
-Verify with:
+`pigpio` requires elevated privileges to access the GPIO hardware. The recommended approach is to run the server via `sudo`, or start the `pigpiod` daemon and add your user to the `gpio` group:
+
 ```bash
-groups | grep gpio
+# Option A – run as root (simplest)
+sudo npm start
+
+# Option B – use the pigpio daemon
+sudo systemctl enable pigpiod
+sudo systemctl start pigpiod
+sudo usermod -aG gpio $USER
+# Log out and back in (or reboot), then run normally:
+npm start
 ```
 
 ---

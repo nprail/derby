@@ -33,19 +33,24 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
   function setup() {
     if (opts.simulate) return
     try {
-      const { Gpio } = require('onoff')
-      sensors = {}
+      const { Gpio } = require('pigpio')
+      const newSensors = {}
       const pins = Object.fromEntries(
         Object.entries(DEFAULT_GPIO_PINS).filter(
           ([l]) => parseInt(l) <= opts.lanes,
         ),
       )
       for (const [lane, pin] of Object.entries(pins)) {
-        sensors[lane] = new Gpio(pin, 'in', 'falling', {
-          debounceTimeout: DEBOUNCE_MS,
+        const s = new Gpio(pin, {
+          mode: Gpio.INPUT,
+          pullUpDown: Gpio.PUD_UP,
+          alert: true,
         })
+        s.glitchFilter(DEBOUNCE_MS * 1000) // pigpio uses microseconds
+        newSensors[lane] = s
         console.log(`  Lane ${lane} → GPIO ${pin}`)
       }
+      sensors = newSensors
     } catch (err) {
       console.warn('GPIO unavailable:', err.message, '— use --simulate')
     }
@@ -66,8 +71,8 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
 
     for (const [lane, sensor] of Object.entries(sensors)) {
       if (parseInt(lane) > opts.lanes) continue
-      sensor.watch((err) => {
-        if (err || state.status !== 'armed') return
+      sensor.on('alert', (level) => {
+        if (level !== 0 || state.status !== 'armed') return // level 0 = falling edge
         _handleTrigger(parseInt(lane))
       })
     }
@@ -79,7 +84,7 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
 
   function reset() {
     clearTimeout(heatTimer)
-    if (sensors) for (const s of Object.values(sensors)) s.unwatch()
+    if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
     state._startTime = null
     triggered.clear()
     state.heat++
@@ -89,7 +94,7 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
   }
 
   function cleanup() {
-    if (sensors) for (const s of Object.values(sensors)) s.unexport()
+    if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -111,7 +116,7 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
 
   function _finishHeat() {
     clearTimeout(heatTimer)
-    if (sensors) for (const s of Object.values(sensors)) s.unwatch()
+    if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
     state._startTime = null
     state.status = 'finished'
 
