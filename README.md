@@ -173,11 +173,17 @@ The camera must be reachable at the given IP address and in a record-ready state
 
 | ZCam endpoint | Purpose |
 |---|---|
+| `GET /info` | Camera availability ping |
+| `GET /ctrl/session` | Acquire control session |
+| `GET /ctrl/session?action=quit` | Release control session |
+| `GET /datetime?date=YYYY-MM-DD&time=hh:mm:ss` | Sync camera clock to host time |
+| `GET /ctrl/mode?action=query` | Query current working mode |
 | `GET /ctrl/mode?action=to_rec` | Switch camera to record-ready mode |
 | `GET /ctrl/rec?action=start` | Start recording |
 | `GET /ctrl/rec?action=stop` | Stop recording |
-| `GET /ctrl/list?p=/DCIM/100ZCAME/` | List clips on SD card |
-| `GET /DCIM/100ZCAME/<file>` | Download a clip |
+| `GET /DCIM/` | List DCIM sub-folders on SD card |
+| `GET /DCIM/<folder>` | List clip files in a folder |
+| `GET /DCIM/<folder>/<file>` | Download a clip |
 
 **Default ZCam IP** when connected via USB (RNDIS) or the camera's built-in Wi-Fi AP: `10.98.32.1`
 
