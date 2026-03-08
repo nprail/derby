@@ -67,6 +67,8 @@ let state = {
   numLanes: opts.lanes,
   history: [], // last 10 heats
   videoUrl: null, // URL of the latest heat recording, or null
+  videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
+  zcamEnabled: !!opts.zcamIp, // whether ZCam integration is active
 }
 
 function buildDefaultColors(n) {
@@ -88,7 +90,11 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  const cfg = { heat: state.heat, laneColors: state.laneColors }
+  const cfg = {
+    heat: state.heat,
+    laneColors: state.laneColors,
+    videoReplayEnabled: state.videoReplayEnabled,
+  }
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
 }
 
@@ -159,7 +165,9 @@ const sensorManager = createSensorManager({
       zcam.stopAndFetchVideo(state.heat).then((url) => {
         if (url) {
           state.videoUrl = url
-          broadcast('video', { videoUrl: url })
+          if (state.videoReplayEnabled) {
+            broadcast('video', { videoUrl: url })
+          }
         }
       }).catch((err) => {
         console.error('ZCam: video fetch error:', err.message)
@@ -212,6 +220,17 @@ app.post('/api/colors', (req, res) => {
   state.laneColors = { ...state.laneColors, ...colors }
   saveConfig()
   broadcast('colors')
+  res.json({ ok: true })
+})
+
+app.post('/api/settings', (req, res) => {
+  const { videoReplayEnabled } = req.body
+  if (typeof videoReplayEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'Missing or invalid videoReplayEnabled' })
+  }
+  state.videoReplayEnabled = videoReplayEnabled
+  saveConfig()
+  broadcast('settings')
   res.json({ ok: true })
 })
 

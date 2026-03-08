@@ -462,6 +462,12 @@
           await api('/api/colors', { colors })
         }
 
+        async function handleToggleVideoReplay() {
+          await api('/api/settings', {
+            videoReplayEnabled: !state.videoReplayEnabled,
+          })
+        }
+
         return (
           <div className="min-h-screen flex flex-col">
             {/* Header */}
@@ -538,6 +544,59 @@
                     </button>
                   </div>
                 </div>
+
+                {/* Video Replay Toggle */}
+                {state.zcamEnabled && (
+                  <div>
+                    <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                      Camera
+                    </div>
+                    <button
+                      onClick={handleToggleVideoReplay}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all"
+                      style={{
+                        background: state.videoReplayEnabled
+                          ? 'rgba(99,102,241,0.12)'
+                          : 'rgba(255,255,255,0.03)',
+                        borderColor: state.videoReplayEnabled
+                          ? 'rgba(99,102,241,0.5)'
+                          : 'rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      <div className="text-left">
+                        <div
+                          className="font-condensed text-sm font-semibold uppercase tracking-widest"
+                          style={{
+                            color: state.videoReplayEnabled
+                              ? '#a5b4fc'
+                              : 'rgba(255,255,255,0.3)',
+                          }}
+                        >
+                          Video Replay
+                        </div>
+                        <div className="font-condensed text-xs text-white/20 mt-0.5">
+                          Show heat recording on guest display
+                        </div>
+                      </div>
+                      {/* Toggle pill */}
+                      <div
+                        className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+                        style={{
+                          background: state.videoReplayEnabled
+                            ? '#6366f1'
+                            : 'rgba(255,255,255,0.1)',
+                        }}
+                      >
+                        <div
+                          className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+                          style={{
+                            left: state.videoReplayEnabled ? '22px' : '2px',
+                          }}
+                        />
+                      </div>
+                    </button>
+                  </div>
+                )}
 
                 {/* Lane Colors */}
                 <div>

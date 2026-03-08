@@ -397,7 +397,7 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history, videoUrl } = state
+        const { finishOrder, laneColors, status, heat, history, videoUrl, videoReplayEnabled } = state
         const showResults = status === 'finished' && finishOrder.length > 0
 
         return (
@@ -442,7 +442,7 @@
             </main>
 
             {/* Heat video replay */}
-            <HeatVideo videoUrl={videoUrl} />
+            <HeatVideo videoUrl={videoReplayEnabled ? videoUrl : null} />
 
             {/* History */}
             {history.length > 0 && (
