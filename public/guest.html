@@ -333,6 +333,38 @@
         )
       }
 
+      function HeatVideo({ videoUrl }) {
+        const videoRef = useRef(null)
+
+        useEffect(() => {
+          if (videoUrl && videoRef.current) {
+            videoRef.current.load()
+            videoRef.current.play().catch((err) => {
+              console.warn('ZCam replay autoplay blocked:', err.message)
+            })
+          }
+        }, [videoUrl])
+
+        if (!videoUrl) return null
+
+        return (
+          <div className="border-t border-white/5 px-4 py-4 max-w-2xl mx-auto w-full">
+            <div className="font-condensed text-xs uppercase tracking-widest text-white/20 mb-3">
+              Heat Replay
+            </div>
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              playsInline
+              loop
+              className="w-full rounded-xl border border-white/10"
+              style={{ background: '#000' }}
+            />
+          </div>
+        )
+      }
+
       function App() {
         const [state, setState] = useState(null)
         const [isNew, setIsNew] = useState(false)
@@ -365,7 +397,7 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history } = state
+        const { finishOrder, laneColors, status, heat, history, videoUrl } = state
         const showResults = status === 'finished' && finishOrder.length > 0
 
         return (
@@ -408,6 +440,9 @@
                 <WaitingState status={status} />
               )}
             </main>
+
+            {/* Heat video replay */}
+            <HeatVideo videoUrl={videoUrl} />
 
             {/* History */}
             {history.length > 0 && (

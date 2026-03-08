@@ -18,14 +18,15 @@ function shuffle(arr) {
 /**
  * Creates a sensor manager that handles GPIO inputs and race simulation.
  *
- * @param {object}   deps            - Dependencies
- * @param {object}   deps.opts       - Parsed CLI options (lanes, timeout, simulate)
- * @param {object}   deps.state      - Shared race state object (mutated in place)
- * @param {Function} deps.broadcast  - WebSocket broadcast function (type, payload?)
- * @param {Function} deps.onFinish   - Called when a heat completes (e.g. for CSV logging)
+ * @param {object}   deps                - Dependencies
+ * @param {object}   deps.opts           - Parsed CLI options (lanes, timeout, simulate)
+ * @param {object}   deps.state          - Shared race state object (mutated in place)
+ * @param {Function} deps.broadcast      - WebSocket broadcast function (type, payload?)
+ * @param {Function} deps.onFirstTrigger - Called when the very first lane triggers (optional)
+ * @param {Function} deps.onFinish       - Called when a heat completes (e.g. for CSV logging)
  * @returns {{ setup, arm, reset, cleanup }}
  */
-function createSensorManager({ opts, state, broadcast, onFinish }) {
+function createSensorManager({ opts, state, broadcast, onFirstTrigger, onFinish }) {
   let sensors = null
   let heatTimer = null
   const triggered = new Set()
@@ -111,6 +112,8 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
     state.finishOrder.push({ lane, gapMs })
     broadcast('trigger', { lane, gapMs, place: state.finishOrder.length })
     console.log(`  Lane ${lane} finished! (+${gapMs.toFixed(1)} ms)`)
+
+    if (triggered.size === 1 && typeof onFirstTrigger === 'function') onFirstTrigger()
 
     if (triggered.size === opts.lanes) _finishHeat()
   }

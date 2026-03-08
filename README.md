@@ -12,6 +12,7 @@ A real-time race timing and display server for Pinewood Derby events. Runs on a 
 - **Simulation mode** — develop and demo without any hardware
 - **CSV logging** — every heat result is appended to `derby_results.csv`
 - **Configurable lane count** — supports 1–4 lanes out of the box (extend `DEFAULT_GPIO_PINS` in `gpio.js` for more)
+- **ZCam E2M4 integration** — automatically starts recording on the first lane trigger, stops when the heat finishes, downloads the clip, and plays it back on the guest dashboard
 
 ---
 
@@ -48,6 +49,10 @@ npm run simulate
 # Custom options
 node server.js --lanes 3 --port 8080 --timeout 10
 node server.js --simulate --lanes 2
+
+# With ZCam E2M4 video recording (replace IP with your camera's address)
+node server.js --zcam 10.98.32.1
+node server.js --simulate --zcam 10.98.32.1
 ```
 
 ### CLI Flags
@@ -58,6 +63,7 @@ node server.js --simulate --lanes 2
 | `--port <n>` | `3000` | HTTP server port |
 | `--timeout <s>` | `8` | Seconds before a heat auto-finishes if not all lanes trigger |
 | `--simulate` | off | Use simulated race results instead of GPIO |
+| `--zcam <ip>` | off | Enable ZCam E2M4 recording; provide the camera's IP address |
 
 ---
 
@@ -140,6 +146,7 @@ Connect to `ws://localhost:3000`. Every message is a JSON object that always inc
 | `finished` | — | All cars finished (or timeout elapsed) |
 | `reset` | — | Heat was reset; `state.heat` incremented |
 | `colors` | — | Lane colors were updated |
+| `video` | `videoUrl` | ZCam clip has been downloaded; `state.videoUrl` is now set |
 
 **Example client:**
 ```js
@@ -152,7 +159,37 @@ ws.onmessage = (e) => {
 
 ---
 
-## Hardware Setup (Raspberry Pi)
+## ZCam E2M4 Integration
+
+When the `--zcam <ip>` flag is provided, the server automatically:
+
+1. **Starts recording** the moment the first car crosses the finish line (first lane trigger)
+2. **Stops recording** when the heat is complete (all lanes triggered or timeout)
+3. **Downloads the clip** from the camera's SD card to `public/videos/heat-N.ext`
+4. **Broadcasts** a `video` WebSocket event so all connected dashboards update immediately
+5. **Plays the clip** automatically on the guest display below the race results
+
+The camera must be reachable at the given IP address and in a record-ready state before each heat. The server uses the ZCam E2 HTTP API:
+
+| ZCam endpoint | Purpose |
+|---|---|
+| `GET /ctrl/mode?action=to_rec` | Switch camera to record-ready mode |
+| `GET /ctrl/rec?action=start` | Start recording |
+| `GET /ctrl/rec?action=stop` | Stop recording |
+| `GET /ctrl/list?p=/DCIM/100ZCAME/` | List clips on SD card |
+| `GET /DCIM/100ZCAME/<file>` | Download a clip |
+
+**Default ZCam IP** when connected via USB (RNDIS) or the camera's built-in Wi-Fi AP: `10.98.32.1`
+
+```bash
+node server.js --zcam 10.98.32.1
+```
+
+Downloaded clips are saved as `public/videos/heat-N.mov` (or `.mp4`) and served at `/videos/heat-N.mov`. They are cleared from the guest display on each heat reset.
+
+---
+
+
 
 For a full Raspberry Pi setup walkthrough (Node.js installation, GPIO permissions, systemd auto-start), see [docs/SETUP.md](docs/SETUP.md).
 
@@ -211,9 +248,11 @@ Eight colors are available. Configure them per-lane from the `/manage` page.
 derby/
 ├── server.js        # HTTP server, WebSocket, API routes, race state, CSV logging
 ├── gpio.js          # GPIO sensor management, race timing, simulation
+├── zcam.js          # ZCam E2M4 HTTP API client (record, stop, download clip)
 ├── public/
-│   ├── guest.html   # Guest-facing live results display (React)
-│   └── manage.html  # Track manager UI (React)
+│   ├── guest.html   # Guest-facing live results display (React) + heat video replay
+│   ├── manage.html  # Track manager UI (React)
+│   └── videos/      # Downloaded heat clips (auto-created when ZCam is enabled)
 ├── docs/
 │   ├── SETUP.md     # Raspberry Pi setup guide
 │   └── WIRING.md    # 2×5 IDC connector wiring guide

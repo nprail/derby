@@ -22,6 +22,7 @@ const WebSocket = require('ws')
 const path = require('path')
 const fs = require('fs')
 const { createSensorManager } = require('./gpio')
+const { createZCamManager } = require('./zcam')
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ function parseArgs() {
     timeout: DEFAULT_TIMEOUT,
     simulate: false,
     port: 3000,
+    zcamIp: null,
   }
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lanes' && args[i + 1]) opts.lanes = parseInt(args[++i])
@@ -46,6 +48,7 @@ function parseArgs() {
     else if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
     else if (args[i] === '--simulate') opts.simulate = true
+    else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
   }
   return opts
 }
@@ -63,6 +66,7 @@ let state = {
   laneColors: savedConfig.laneColors ?? buildDefaultColors(opts.lanes),
   numLanes: opts.lanes,
   history: [], // last 10 heats
+  videoUrl: null, // URL of the latest heat recording, or null
 }
 
 function buildDefaultColors(n) {
@@ -127,13 +131,41 @@ function broadcast(type, payload = {}) {
   }
 }
 
+// ── ZCam ──────────────────────────────────────────────────────────────────────
+
+const zcam = opts.zcamIp
+  ? createZCamManager({
+      cameraIp: opts.zcamIp,
+      videoDir: path.join(__dirname, 'public', 'videos'),
+    })
+  : null
+
+if (zcam) {
+  console.log(`ZCam E2M4 integration enabled — camera at ${opts.zcamIp}`)
+}
+
 // ── Sensor Manager ────────────────────────────────────────────────────────────
 
 const sensorManager = createSensorManager({
   opts,
   state,
   broadcast,
-  onFinish: () => logResult(),
+  onFirstTrigger: () => {
+    if (zcam) zcam.startRecording()
+  },
+  onFinish: () => {
+    logResult()
+    if (zcam) {
+      zcam.stopAndFetchVideo(state.heat).then((url) => {
+        if (url) {
+          state.videoUrl = url
+          broadcast('video', { videoUrl: url })
+        }
+      }).catch((err) => {
+        console.error('ZCam: video fetch error:', err.message)
+      })
+    }
+  },
 })
 
 // ── Express + WS ──────────────────────────────────────────────────────────────
@@ -147,6 +179,7 @@ app.get('/', (req, res) =>
 app.get('/manage', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'manage.html')),
 )
+app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
 
 app.get('/api/state', (req, res) => res.json(state))
 
@@ -159,6 +192,7 @@ app.post('/api/arm', (req, res) => {
 
 app.post('/api/reset', (req, res) => {
   sensorManager.reset()
+  state.videoUrl = null
   res.json({ ok: true })
 })
 
@@ -166,6 +200,7 @@ app.post('/api/reset-race', (req, res) => {
   sensorManager.reset()
   state.heat = 1
   state.history = []
+  state.videoUrl = null
   saveConfig()
   broadcast('reset')
   res.json({ ok: true })
@@ -197,6 +232,9 @@ server.listen(opts.port, () => {
   console.log(
     `   Mode          : ${opts.simulate ? 'SIMULATION' : 'GPIO LIVE'}`,
   )
+  if (opts.zcamIp) {
+    console.log(`   ZCam E2M4     : http://${opts.zcamIp}`)
+  }
   console.log()
 })
 
