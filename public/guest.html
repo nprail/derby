@@ -336,26 +336,44 @@
       function HeatVideo({ videoUrl, onEnded }) {
         const videoRef = useRef(null)
 
+        function realToPlayback(realSeconds, captureFps, playbackFps) {
+          return realSeconds * (captureFps / playbackFps)
+        }
+
         useEffect(() => {
           if (videoUrl && videoRef.current) {
-            videoRef.current.load()
-            videoRef.current.play().catch((err) => {
-              console.warn('ZCam replay autoplay blocked:', err.message)
-            })
+            const video = videoRef.current
+            const onLoaded = () => {
+              // skip the first 4 seconds of playback because preroll is 5 seconds
+              // but we really don't need more than 4 seconds
+              video.currentTime = realToPlayback(4, 240, 29.97)
+              video.play().catch((err) => {
+                console.warn('ZCam replay autoplay blocked:', err.message)
+              })
+            }
+            video.addEventListener('loadedmetadata', onLoaded, { once: true })
+            video.load()
+            return () => video.removeEventListener('loadedmetadata', onLoaded)
           }
         }, [videoUrl])
 
         if (!videoUrl) return null
 
         return (
-          <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <div
+            className="fixed inset-0 z-50 bg-black flex items-center justify-center cursor-pointer"
+            onClick={onEnded}
+          >
             <video
               ref={videoRef}
               src={videoUrl}
               playsInline
+              muted
+              autoPlay
               onEnded={onEnded}
               className="w-full h-full object-contain"
               style={{ background: '#000' }}
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         )
@@ -384,7 +402,10 @@
         // Allow Escape key to dismiss the video overlay
         useEffect(() => {
           function onKeyDown(e) {
-            if (e.key === 'Escape') setShowVideo(false)
+            if (e.key === 'Escape') {
+              setShowVideo(false)
+              setActiveVideoUrl(null)
+            }
           }
           window.addEventListener('keydown', onKeyDown)
           return () => window.removeEventListener('keydown', onKeyDown)
@@ -421,7 +442,10 @@
             ws.onclose = () => setTimeout(connect, 2000)
           }
           connect()
-          return () => wsRef.current?.close()
+          return () => {
+            wsRef.current?.close()
+            clearTimeout(videoTimerRef.current)
+          }
         }, [])
 
         if (!state)
@@ -479,7 +503,10 @@
 
             {/* Heat video replay — fullscreen overlay, auto-hides after one play */}
             {showVideo && (
-              <HeatVideo videoUrl={activeVideoUrl} onEnded={() => setShowVideo(false)} />
+              <HeatVideo
+                videoUrl={activeVideoUrl}
+                onEnded={() => setShowVideo(false)}
+              />
             )}
 
             {/* History */}

@@ -225,7 +225,8 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
       }
 
       const ext = path.extname(newClip.name).toLowerCase()
-      const localName = `heat-${heat}${ext}`
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
+      const localName = `heat-${heat}_${ts}${ext}`
       const localPath = path.join(videoDir, localName)
 
       console.log(`ZCam: downloading ${newClip.name} → ${localPath}`)

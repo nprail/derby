@@ -162,6 +162,8 @@ dist
 
 # End of https://www.toptal.com/developers/gitignore/api/node,visualstudiocode
 
+.DS_Store
+
 derby_results.csv
 derby_config.json
 public/videos/

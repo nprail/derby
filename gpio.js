@@ -59,6 +59,9 @@ function createSensorManager({ opts, state, broadcast, onFirstTrigger, onFinish 
   }
 
   function arm() {
+    if (state.status === 'finished') {
+      state.heat++
+    }
     triggered.clear()
     state.finishOrder = []
     state.status = 'armed'

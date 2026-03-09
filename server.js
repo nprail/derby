@@ -200,16 +200,16 @@ app.post('/api/arm', (req, res) => {
 })
 
 app.post('/api/reset', (req, res) => {
-  sensorManager.reset()
   state.videoUrl = null
+  sensorManager.reset()
   res.json({ ok: true })
 })
 
 app.post('/api/reset-race', (req, res) => {
+  state.videoUrl = null
   sensorManager.reset()
   state.heat = 1
   state.history = []
-  state.videoUrl = null
   saveConfig()
   broadcast('reset')
   res.json({ ok: true })
