@@ -163,7 +163,7 @@ const sensorManager = createSensorManager({
   onFinish: () => {
     logResult()
     if (zcam) {
-      zcam.stopAndFetchVideo(state.heat).then((url) => {
+      setTimeout(() => zcam.stopAndFetchVideo(state.heat).then((url) => {
         if (url) {
           state.videoUrl = url
           if (state.videoReplayEnabled) {
@@ -172,7 +172,7 @@ const sensorManager = createSensorManager({
         }
       }).catch((err) => {
         console.error('ZCam: video fetch error:', err.message)
-      })
+      }), 500)
     }
   },
 })

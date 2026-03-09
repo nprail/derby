@@ -51,6 +51,9 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
   // used to identify the newly created clip after stopping.
   let filesBeforeRec = []
 
+  // Timestamp (ms) when startRecording() succeeded, used to measure duration.
+  let recordingStartedAt = null
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   /** GET a ZCam API endpoint and return its parsed JSON data. */
@@ -171,6 +174,7 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
         throw new Error(`ZCam: start recording failed: ${JSON.stringify(data)}`)
       }
 
+      recordingStartedAt = Date.now()
       console.log('ZCam: recording started')
       return true
     } catch (err) {
@@ -198,6 +202,11 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
       const data = await get('/ctrl/rec?action=stop')
       if (data?.code !== 0) {
         console.warn('ZCam: stop recording returned non-zero code:', JSON.stringify(data))
+      }
+      const durationMs = recordingStartedAt !== null ? Date.now() - recordingStartedAt : null
+      recordingStartedAt = null
+      if (durationMs !== null) {
+        console.log(`ZCam: recording duration — ${(durationMs / 1000).toFixed(3)} s`)
       }
       console.log('ZCam: recording stopped')
     } catch (err) {
@@ -231,6 +240,7 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
 
       console.log(`ZCam: downloading ${newClip.name} → ${localPath}`)
 
+      const downloadStartedAt = Date.now()
       const response = await cam.get(`/DCIM/${newClip.folder}/${newClip.name}`, {
         responseType: 'stream',
         timeout: 60000,
@@ -242,8 +252,9 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
         dest.on('error', reject)
         response.data.on('error', reject)
       })
+      const downloadMs = Date.now() - downloadStartedAt
 
-      console.log(`ZCam: download complete — /videos/${localName}`)
+      console.log(`ZCam: download complete — /videos/${localName} (${(downloadMs / 1000).toFixed(3)} s)`)
       return `/videos/${localName}`
     } catch (err) {
       console.error('ZCam: failed to fetch video:', err.message)
