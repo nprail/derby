@@ -30,7 +30,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
  * @param {object} options
  * @param {string} options.cameraIp  - IP address of the ZCam (default: 10.98.32.1)
  * @param {string} options.videoDir  - Local directory to save downloaded clips
- * @returns {{ startRecording, stopAndFetchVideo }}
+ * @returns {{ setup, startRecording, stopAndFetchVideo, disconnect }}
  */
 function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos' } = {}) {
   // Axios instance pre-configured for this camera
@@ -41,6 +41,9 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
 
   // Ensure the local video directory exists
   fs.mkdirSync(videoDir, { recursive: true })
+
+  // Set to true after setup() succeeds; recording calls are skipped when false.
+  let ready = false
 
   // Snapshot of { folder, name } objects present before recording started,
   // used to identify the newly created clip after stopping.
@@ -127,13 +130,37 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
   // ── Public API ──────────────────────────────────────────────────────────────
 
   /**
-   * Acquires a session, syncs the clock, snapshots the file list, then starts
+   * Acquires a session and syncs the camera clock to the host time.
+   * Should be called once at server startup before any recording.
+   * Sets an internal `ready` flag so that startRecording() and
+   * stopAndFetchVideo() are no-ops if setup never succeeded.
+   */
+  async function setup() {
+    await acquireSession()
+    await syncDatetime()
+    ready = true
+    console.log('ZCam: session acquired and clock synced')
+  }
+
+  /**
+   * Releases the session. Should be called on server shutdown.
+   */
+  async function disconnect() {
+    ready = false
+    await releaseSession()
+  }
+
+  /**
+   * Snapshots the current file list, ensures record mode, then starts
    * recording. Should be called on the first lane trigger.
+   * Returns false without attempting anything if setup() did not succeed.
    */
   async function startRecording() {
+    if (!ready) {
+      console.warn('ZCam: skipping startRecording — setup() has not succeeded')
+      return false
+    }
     try {
-      await acquireSession()
-      await syncDatetime()
       filesBeforeRec = await listAllClips()
       await ensureRecordMode()
 
@@ -146,21 +173,25 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
       return true
     } catch (err) {
       console.error('ZCam: failed to start recording:', err.message)
-      await releaseSession()
       return false
     }
   }
 
   /**
-   * Stops recording, releases the session, waits for the file to be finalised,
-   * then downloads it to `videoDir`.
+   * Stops recording, waits for the file to be finalised, then downloads it
+   * to `videoDir`.
+   * Returns null without attempting anything if setup() did not succeed.
    *
    * @param {number} heat  - Current heat number, used to name the local file
    * @returns {string|null}  Web-accessible path like "/videos/heat-3.mov",
    *                         or null if anything went wrong.
    */
   async function stopAndFetchVideo(heat) {
-    // Stop recording and always release the session afterwards
+    if (!ready) {
+      console.warn('ZCam: skipping stopAndFetchVideo — setup() has not succeeded')
+      return null
+    }
+    // Stop recording
     try {
       const data = await get('/ctrl/rec?action=stop')
       if (data?.code !== 0) {
@@ -169,8 +200,6 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
       console.log('ZCam: recording stopped')
     } catch (err) {
       console.error('ZCam: failed to stop recording:', err.message)
-    } finally {
-      await releaseSession()
     }
 
     // Wait for the camera to flush the file, then find and download the new clip
@@ -213,7 +242,7 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
     }
   }
 
-  return { startRecording, stopAndFetchVideo }
+  return { setup, startRecording, stopAndFetchVideo, disconnect }
 }
 
 module.exports = { createZCamManager }

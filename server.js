@@ -148,6 +148,7 @@ const zcam = opts.zcamIp
 
 if (zcam) {
   console.log(`ZCam E2M4 integration enabled — camera at ${opts.zcamIp}`)
+  zcam.setup().catch((err) => console.error('ZCam: setup failed:', err.message))
 }
 
 // ── Sensor Manager ────────────────────────────────────────────────────────────
@@ -259,5 +260,9 @@ server.listen(opts.port, () => {
 
 process.on('SIGINT', () => {
   sensorManager.cleanup()
-  process.exit(0)
+  if (zcam) {
+    zcam.disconnect().finally(() => process.exit(0))
+  } else {
+    process.exit(0)
+  }
 })
