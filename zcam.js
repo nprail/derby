@@ -8,7 +8,7 @@
 //
 // Reference: https://github.com/imaginevision/Z-Camera-Doc/blob/master/E2/protocol/http/http.md
 
-const http = require('http')
+const axios = require('axios')
 const fs = require('fs')
 const path = require('path')
 
@@ -19,73 +19,7 @@ const STOP_SETTLE_MS = 3000
 // Recognized clip extensions (lower-cased for comparison)
 const VIDEO_EXTS = new Set(['.mov', '.mp4'])
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-/**
- * Performs a GET request against the ZCam HTTP API and returns the parsed JSON
- * body (or the raw string if the response is not valid JSON).
- */
-function zcamGet(baseUrl, apiPath, timeoutMs = 8000) {
-  return new Promise((resolve, reject) => {
-    const url = `${baseUrl}${apiPath}`
-    const req = http.get(url, { timeout: timeoutMs }, (res) => {
-      let raw = ''
-      res.on('data', (c) => (raw += c))
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(raw))
-        } catch {
-          resolve(raw)
-        }
-      })
-    })
-    req.on('timeout', () => {
-      req.destroy()
-      reject(new Error(`ZCam request timed out: ${url}`))
-    })
-    req.on('error', reject)
-  })
-}
-
-/**
- * Streams a file from the ZCam onto local disk.
- * Returns a promise that resolves when the download is complete.
- */
-function downloadFile(baseUrl, remotePath, localPath, timeoutMs = 60000) {
-  return new Promise((resolve, reject) => {
-    const url = `${baseUrl}${remotePath}`
-    const req = http.get(url, { timeout: timeoutMs }, (res) => {
-      if (res.statusCode !== 200) {
-        res.resume() // drain to free socket
-        req.destroy()
-        return reject(
-          new Error(`ZCam download failed: HTTP ${res.statusCode} for ${url}`),
-        )
-      }
-      const dest = fs.createWriteStream(localPath)
-      res.pipe(dest)
-      dest.on('finish', resolve)
-      dest.on('error', (err) => {
-        dest.destroy()
-        res.destroy()
-        reject(err)
-      })
-      res.on('error', (err) => {
-        dest.destroy()
-        reject(err)
-      })
-    })
-    req.on('timeout', () => {
-      req.destroy()
-      reject(new Error(`ZCam download timed out: ${url}`))
-    })
-    req.on('error', reject)
-  })
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms))
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ── Public factory ────────────────────────────────────────────────────────────
 
@@ -99,77 +33,71 @@ function sleep(ms) {
  * @returns {{ startRecording, stopAndFetchVideo }}
  */
 function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos' } = {}) {
-  const baseUrl = `http://${cameraIp}`
+  // Axios instance pre-configured for this camera
+  const cam = axios.create({
+    baseURL: `http://${cameraIp}`,
+    timeout: 8000,
+  })
 
   // Ensure the local video directory exists
   fs.mkdirSync(videoDir, { recursive: true })
 
-  // Snapshot of { folder, name } objects present before recording started, used
-  // to identify the newly created clip after stopping.
+  // Snapshot of { folder, name } objects present before recording started,
+  // used to identify the newly created clip after stopping.
   let filesBeforeRec = []
 
-  // ── Session management ──────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  /**
-   * Acquires a control session.
-   * Most /ctrl/* commands require session ownership.
-   * The camera returns HTTP 409 when the session is already held by another client.
-   */
+  /** GET a ZCam API endpoint and return its parsed JSON data. */
+  async function get(apiPath) {
+    const { data } = await cam.get(apiPath)
+    return data
+  }
+
+  /** Acquires a control session (required before any /ctrl/* commands). */
   async function acquireSession() {
-    const res = await zcamGet(baseUrl, '/ctrl/session')
-    if (!res || res.code !== 0) {
-      throw new Error(`ZCam: failed to acquire session: ${JSON.stringify(res)}`)
+    const data = await get('/ctrl/session')
+    if (data?.code !== 0) {
+      throw new Error(`ZCam: failed to acquire session: ${JSON.stringify(data)}`)
     }
   }
 
-  /**
-   * Releases the control session so other clients can connect.
-   * Errors are swallowed because release is best-effort cleanup.
-   */
+  /** Releases the session — best-effort, errors are only warned. */
   async function releaseSession() {
-    await zcamGet(baseUrl, '/ctrl/session?action=quit').catch((err) =>
+    await get('/ctrl/session?action=quit').catch((err) =>
       console.warn('ZCam: session release warning:', err.message),
     )
   }
 
-  // ── Date/time sync ──────────────────────────────────────────────────────────
-
-  /**
-   * Syncs the camera clock to the host system time.
-   * The ZCam docs recommend doing this on every connection.
-   */
+  /** Syncs the camera clock to the host system time. */
   async function syncDatetime() {
     const now = new Date()
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().split(' ')[0]
-    const res = await zcamGet(baseUrl, `/datetime?date=${date}&time=${encodeURIComponent(time)}`)
-    if (res && res.code !== 0) {
-      console.warn('ZCam: datetime sync returned non-zero code:', JSON.stringify(res))
+    const data = await get(`/datetime?date=${date}&time=${encodeURIComponent(time)}`)
+    if (data?.code !== 0) {
+      console.warn('ZCam: datetime sync returned non-zero code:', JSON.stringify(data))
     }
   }
-
-  // ── File management ─────────────────────────────────────────────────────────
 
   /**
    * Lists all video clip files across every DCIM subfolder on the SD card.
    *
-   * The ZCam file-management API works in two steps:
-   *   1. GET /DCIM/           → { files: ["100ZCAME", "101ZCAME", ...] }
-   *   2. GET /DCIM/<folder>   → { files: ["ZCAM0001_...MOV", ...] }
+   * Two-step API:
+   *   GET /DCIM/          → { files: ["100ZCAME", ...] }
+   *   GET /DCIM/<folder>  → { files: ["ZCAM0001.MOV", ...] }
    *
    * @returns {Array<{folder: string, name: string}>}
    */
   async function listAllClips() {
-    const foldersRes = await zcamGet(baseUrl, '/DCIM/')
-    if (!foldersRes || foldersRes.code !== 0 || !Array.isArray(foldersRes.files)) {
-      return []
-    }
+    const foldersData = await get('/DCIM/')
+    if (foldersData?.code !== 0 || !Array.isArray(foldersData.files)) return []
 
     const clips = []
-    for (const folder of foldersRes.files) {
-      const filesRes = await zcamGet(baseUrl, `/DCIM/${folder}`)
-      if (filesRes && filesRes.code === 0 && Array.isArray(filesRes.files)) {
-        for (const name of filesRes.files) {
+    for (const folder of foldersData.files) {
+      const filesData = await get(`/DCIM/${folder}`)
+      if (filesData?.code === 0 && Array.isArray(filesData.files)) {
+        for (const name of filesData.files) {
           if (VIDEO_EXTS.has(path.extname(name).toLowerCase())) {
             clips.push({ folder, name })
           }
@@ -179,98 +107,74 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
     return clips
   }
 
-  // ── Working mode ────────────────────────────────────────────────────────────
-
   /**
    * Ensures the camera is in record-ready mode.
-   *
-   * Mode values (from the API docs):
-   *   rec        — record mode, ready to start
-   *   rec_ing    — actively recording
-   *   rec_paused — recording paused
-   *   pb         — playback mode
-   *   standby    — standby
-   *
-   * If the camera is already recording we leave it as-is.
-   * If it's in any other mode we switch to rec.
+   * Mode values: rec | rec_ing | rec_paused | pb | standby
    */
   async function ensureRecordMode() {
-    const modeRes = await zcamGet(baseUrl, '/ctrl/mode?action=query')
-    if (!modeRes || modeRes.code !== 0) {
-      throw new Error(`ZCam: mode query failed: ${JSON.stringify(modeRes)}`)
+    const data = await get('/ctrl/mode?action=query')
+    if (data?.code !== 0) {
+      throw new Error(`ZCam: mode query failed: ${JSON.stringify(data)}`)
     }
+    if (data.msg === 'rec' || data.msg === 'rec_ing') return // already correct
 
-    const mode = modeRes.msg
-    if (mode === 'rec' || mode === 'rec_ing') return // already correct
-
-    const switchRes = await zcamGet(baseUrl, '/ctrl/mode?action=to_rec')
-    if (!switchRes || switchRes.code !== 0) {
-      throw new Error(`ZCam: failed to switch to rec mode: ${JSON.stringify(switchRes)}`)
+    const switchData = await get('/ctrl/mode?action=to_rec')
+    if (switchData?.code !== 0) {
+      throw new Error(`ZCam: failed to switch to rec mode: ${JSON.stringify(switchData)}`)
     }
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
   /**
-   * Acquires a camera session, syncs the clock, snapshots the current file
-   * list, then starts recording.
-   * Should be called on the first lane trigger.
+   * Acquires a session, syncs the clock, snapshots the file list, then starts
+   * recording. Should be called on the first lane trigger.
    */
   async function startRecording() {
     try {
-      // Acquire session before issuing any /ctrl/* commands
       await acquireSession()
-
-      // Sync camera clock to host time (recommended by ZCam docs)
       await syncDatetime()
-
-      // Snapshot the file list so we can diff for the new clip after stopping
       filesBeforeRec = await listAllClips()
-
-      // Switch to record mode if needed, then start
       await ensureRecordMode()
 
-      const recRes = await zcamGet(baseUrl, '/ctrl/rec?action=start')
-      if (recRes && recRes.code !== 0) {
-        throw new Error(`ZCam: start recording failed: ${JSON.stringify(recRes)}`)
+      const data = await get('/ctrl/rec?action=start')
+      if (data?.code !== 0) {
+        throw new Error(`ZCam: start recording failed: ${JSON.stringify(data)}`)
       }
 
       console.log('ZCam: recording started')
       return true
     } catch (err) {
       console.error('ZCam: failed to start recording:', err.message)
-      // Release session so we don't leave the camera locked
       await releaseSession()
       return false
     }
   }
 
   /**
-   * Stops the current recording, releases the session, waits for the file to
-   * be finalised, then downloads it to `videoDir`.
+   * Stops recording, releases the session, waits for the file to be finalised,
+   * then downloads it to `videoDir`.
    *
    * @param {number} heat  - Current heat number, used to name the local file
    * @returns {string|null}  Web-accessible path like "/videos/heat-3.mov",
    *                         or null if anything went wrong.
    */
   async function stopAndFetchVideo(heat) {
-    // ── Step 1: stop recording and release session ──────────────────────────
+    // Stop recording and always release the session afterwards
     try {
-      const stopRes = await zcamGet(baseUrl, '/ctrl/rec?action=stop')
-      if (stopRes && stopRes.code !== 0) {
-        console.warn('ZCam: stop recording returned non-zero code:', JSON.stringify(stopRes))
+      const data = await get('/ctrl/rec?action=stop')
+      if (data?.code !== 0) {
+        console.warn('ZCam: stop recording returned non-zero code:', JSON.stringify(data))
       }
       console.log('ZCam: recording stopped')
     } catch (err) {
       console.error('ZCam: failed to stop recording:', err.message)
     } finally {
-      // Always release the session, even if stop failed
       await releaseSession()
     }
 
-    // ── Step 2: wait, then find and download the new clip ───────────────────
+    // Wait for the camera to flush the file, then find and download the new clip
     try {
-      // Give the camera time to close and flush the file to the SD card
       await sleep(STOP_SETTLE_MS)
 
       const filesAfter = await listAllClips()
@@ -286,13 +190,22 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
       const ext = path.extname(newClip.name).toLowerCase()
       const localName = `heat-${heat}${ext}`
       const localPath = path.join(videoDir, localName)
-      // Download path: GET /DCIM/<folder>/<filename>
-      const remotePath = `/DCIM/${newClip.folder}/${newClip.name}`
 
       console.log(`ZCam: downloading ${newClip.name} → ${localPath}`)
-      await downloadFile(baseUrl, remotePath, localPath)
-      console.log(`ZCam: download complete — /videos/${localName}`)
 
+      const response = await cam.get(`/DCIM/${newClip.folder}/${newClip.name}`, {
+        responseType: 'stream',
+        timeout: 60000,
+      })
+      await new Promise((resolve, reject) => {
+        const dest = fs.createWriteStream(localPath)
+        response.data.pipe(dest)
+        dest.on('finish', resolve)
+        dest.on('error', reject)
+        response.data.on('error', reject)
+      })
+
+      console.log(`ZCam: download complete — /videos/${localName}`)
       return `/videos/${localName}`
     } catch (err) {
       console.error('ZCam: failed to fetch video:', err.message)
