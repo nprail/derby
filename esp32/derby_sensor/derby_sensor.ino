@@ -150,11 +150,14 @@ void loop() {
   int captured = isrCount;
   while (reportedCount < captured) {
     int i = reportedCount;
-    if (postTrigger(isrLanes[i], isrTimestamps[i])) {
-      reportedCount++;
-    } else {
-      // On POST failure, stop and retry next iteration.
-      break;
+    bool ok = false;
+    for (int attempt = 0; attempt < 3 && !ok; attempt++) {
+      ok = postTrigger(isrLanes[i], isrTimestamps[i]);
+      if (!ok) delay(100);
     }
+    if (!ok) {
+      Serial.printf("[trigger] Lane %d giving up after 3 attempts\n", isrLanes[i]);
+    }
+    reportedCount++;
   }
 }
