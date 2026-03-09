@@ -58,5 +58,5 @@ Before powering up, use a multimeter in continuity mode:
 
 - Interrupts fire via `attachInterrupt(FALLING)` — latency is typically < 2 µs on ESP32.
 - `esp_timer_get_time()` provides a 1 µs resolution monotonic clock.
-- All gap calculations happen on-device before any network call, so WiFi jitter (typically 1–10 ms) has zero effect on recorded finish times.
-- Hardware debounce is implemented in firmware (`DEBOUNCE_US = 50000`), matching the previous server-side 50 ms window.
+- The raw `timestamp_us` value is sent to the server with each trigger; the server computes `gapMs = (timestamp_i − timestamp_0) / 1000`. Because all timestamps come from the same ESP32 clock, WiFi jitter (typically 1–10 ms) has zero effect on recorded finish times.
+- Hardware debounce is implemented in firmware (`DEBOUNCE_US = 50000`). Triggers on the same lane within 50 ms of the previous edge are ignored.

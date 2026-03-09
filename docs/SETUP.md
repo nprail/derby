@@ -11,15 +11,15 @@ Finish-line sensors
         │  (falling-edge interrupt)
         ▼
    ESP32 sensor node          ← records µs-accurate timestamps via hardware ISR
-        │  POST /api/trigger  ← sends pre-computed gapMs over WiFi
+        │  POST /api/trigger  ← sends { lane, timestamp_us } over WiFi
         ▼
-   Node.js server             ← manages race state, serves web UI
+   Node.js server             ← computes gapMs from timestamps, manages race state, serves web UI
         │  WebSocket
         ▼
    Browser (guest / manage)
 ```
 
-Because the ESP32 records timestamps in hardware before any network call is made, WiFi latency has no effect on race timing accuracy.
+The ESP32 sends the raw `esp_timer_get_time()` value with each trigger. The server computes `gapMs = (timestamp_i − timestamp_0) / 1000` from those values, so timing accuracy is determined by the ESP32 hardware clock — WiFi latency has no effect on race results.
 
 ---
 
@@ -53,6 +53,23 @@ Open `http://localhost:3000/` — you should see the guest display and live simu
 ```bash
 npm start
 ```
+
+### Available CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--lanes N` | `4` | Number of race lanes |
+| `--timeout N` | `8` | Seconds to wait before auto-finishing a heat |
+| `--port N` | `3000` | HTTP/WebSocket port |
+| `--simulate` | off | Run with simulated sensor events (no hardware needed) |
+| `--zcam <ip>` | off | Enable ZCam E2M4 video integration at the given IP |
+
+The server starts two pages and a WebSocket endpoint:
+
+| URL | Description |
+|-----|-------------|
+| `http://localhost:3000/` | Guest-facing finish-line display |
+| `http://localhost:3000/manage` | Track manager (arm, reset, configure lanes) |
 
 The server listens for ESP32 trigger events on `POST /api/trigger` and broadcasts results to all connected browsers via WebSocket.
 
@@ -133,3 +150,69 @@ pio device monitor   # view serial output
 ### Wiring the sensors
 
 See [WIRING.md](WIRING.md) for the full ESP32 pinout and sensor circuit.
+
+---
+
+## Part 3 — ZCam E2M4 Integration (Optional)
+
+The server can automatically record each heat and replay the clip on the guest display. A ZCam E2M4 must be on the same network as the server.
+
+### Setup
+
+1. Connect the ZCam to the same WiFi network as the server.
+2. Note the camera's IP address (visible on the camera's LCD or from your router).
+3. Start the server with the `--zcam` flag:
+
+```bash
+node server.js --zcam 192.168.1.50
+```
+
+Replace `192.168.1.50` with the actual IP of your ZCam.
+
+### How it works
+
+- When the **first lane triggers**, the server calls the ZCam HTTP API to start recording.
+- When the **heat finishes**, the server stops recording and downloads the new clip from the camera's SD card.
+- The clip is saved to `public/videos/` and served at `/videos/<filename>`.
+- The guest display automatically plays back the clip after each heat (if video replay is enabled).
+
+Video replay can be toggled from the **Track Manager** page at `/manage`. The setting is saved to `derby_config.json` and persists across restarts.
+
+### Troubleshooting
+
+- Confirm the camera is reachable: `curl http://<camera-ip>/ctrl/session`
+- Check the server console — ZCam errors are logged with the `ZCam:` prefix.
+- Clip download may take up to 30 seconds; the server polls the camera until the new file appears.
+
+---
+
+## Part 3 — ZCam E2M4 Integration (Optional)
+
+The server can automatically record each heat and replay the clip on the guest display. A ZCam E2M4 must be on the same network as the server.
+
+### Setup
+
+1. Connect the ZCam to the same WiFi network as the server.
+2. Note the camera's IP address (visible on the camera's LCD or from the router).
+3. Start the server with the `--zcam` flag:
+
+```bash
+npm start -- --zcam 192.168.1.50
+```
+
+Replace `192.168.1.50` with the actual IP of your ZCam.
+
+### How it works
+
+- When the **first lane triggers**, the server calls the ZCam HTTP API to start recording.
+- When the **heat finishes**, the server stops recording and downloads the clip from the camera's SD card.
+- The clip is saved to `public/videos/` and served at `/videos/<filename>`.
+- The guest display automatically plays back the clip after each heat.
+
+Video replay can be toggled per-session from the **Track Manager** page. The setting is persisted in `derby_config.json`.
+
+### Troubleshooting
+
+- Confirm the camera is reachable: `curl http://<camera-ip>/ctrl/session`
+- Check server console output — ZCam errors are logged with the `ZCam:` prefix.
+- Clip download can take up to 30 seconds after a heat finishes; the server polls the camera until the new file appears.

@@ -119,14 +119,14 @@ Returns the current race state object.
 ```
 
 ### `POST /api/arm`
-Arms the sensors and starts the heat. Returns `400` if already armed.
+Arms the sensors and starts the heat. Returns `400` if already armed. If the previous heat finished without a reset, also increments `state.heat`.
 
 ```json
 { "ok": true }
 ```
 
 ### `POST /api/reset`
-Clears results and advances to the next heat number.
+Clears results and returns the state to `idle`. Does **not** advance the heat number — use this to re-run the same heat. The heat number advances on the next `POST /api/arm`.
 
 ```json
 { "ok": true }
@@ -191,7 +191,7 @@ Connect to `ws://localhost:3000`. Every message is a JSON object that always inc
 | `armed` | — | Sensors have been armed, heat is starting |
 | `trigger` | `lane`, `gapMs`, `place` | A car crossed the finish line |
 | `finished` | — | All cars finished (or timeout elapsed) |
-| `reset` | — | Heat was reset; `state.heat` incremented |
+| `reset` | — | Heat state was cleared; `state.heat` is unchanged (increments on next `armed`) |
 | `colors` | — | Lane colors were updated |
 | `settings` | — | Settings (e.g. `videoReplayEnabled`) were updated |
 | `clear` | — | Display was cleared; `state.videoUrl` is now null |

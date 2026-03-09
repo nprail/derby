@@ -221,7 +221,7 @@ app.post('/api/reset', (req, res) => {
 app.post('/api/trigger', (req, res) => {
   const { lane, timestamp_us } = req.body
   if (state.status !== 'armed')
-    return res.status(400).json({ error: 'Not armed' })
+    return res.json({ ok: true, ignored: true, reason: 'Not armed' })
   const laneNum = parseInt(lane)
   if (!laneNum || laneNum < 1 || laneNum > state.numLanes)
     return res.status(400).json({ error: 'Invalid lane' })
