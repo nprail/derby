@@ -12,9 +12,11 @@ const axios = require('axios')
 const fs = require('fs')
 const path = require('path')
 
-// Time (ms) to wait after stop before querying for the new file.
-// The camera needs a moment to flush and close the file.
-const STOP_SETTLE_MS = 3000
+// Time (ms) between each poll when waiting for the new clip to appear.
+const POLL_INTERVAL_MS = 1000
+
+// Maximum time (ms) to wait for the new clip to appear before giving up.
+const POLL_TIMEOUT_MS = 30000
 
 // Recognized clip extensions (lower-cased for comparison)
 const VIDEO_EXTS = new Set(['.mov', '.mp4'])
@@ -202,14 +204,20 @@ function createZCamManager({ cameraIp = '10.98.32.1', videoDir = 'public/videos'
       console.error('ZCam: failed to stop recording:', err.message)
     }
 
-    // Wait for the camera to flush the file, then find and download the new clip
+    // Poll until a new clip appears on the SD card (the camera needs time to
+    // flush and finalise the file after stopping).
     try {
-      await sleep(STOP_SETTLE_MS)
+      const deadline = Date.now() + POLL_TIMEOUT_MS
+      let newClip = null
 
-      const filesAfter = await listAllClips()
-      const newClip = filesAfter.find(
-        (f) => !filesBeforeRec.some((b) => b.folder === f.folder && b.name === f.name),
-      )
+      while (Date.now() < deadline) {
+        const filesAfter = await listAllClips()
+        newClip = filesAfter.find(
+          (f) => !filesBeforeRec.some((b) => b.folder === f.folder && b.name === f.name),
+        )
+        if (newClip) break
+        await sleep(POLL_INTERVAL_MS)
+      }
 
       if (!newClip) {
         console.warn('ZCam: no new clip found after stopping')
