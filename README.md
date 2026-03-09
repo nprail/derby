@@ -23,6 +23,7 @@ A real-time race timing and display server for Pinewood Derby events. Runs on a 
 | Node.js | ≥ 18 |
 | express | ^4.18 |
 | ws | ^8 |
+| axios | ^1 *(ZCam HTTP API)* |
 | pigpio | ^3 *(Raspberry Pi GPIO only)* |
 
 ---
@@ -103,7 +104,10 @@ Returns the current race state object.
   ],
   "laneColors": { "1": "Red", "2": "Blue", "3": "Yellow", "4": "Green" },
   "numLanes": 4,
-  "history": [ ... ]
+  "history": [ ... ],
+  "videoUrl": "/videos/heat-3_2026-03-09_14-22-05.mov",
+  "videoReplayEnabled": true,
+  "zcamEnabled": true
 }
 ```
 
@@ -121,12 +125,37 @@ Clears results and advances to the next heat number.
 { "ok": true }
 ```
 
+### `POST /api/clear-display`
+Clears the video URL and broadcasts a `clear` event without advancing the heat number.
+
+```json
+{ "ok": true }
+```
+
+### `POST /api/reset-race`
+Resets the entire race: clears results, sets heat back to 1, and clears history.
+
+```json
+{ "ok": true }
+```
+
 ### `POST /api/colors`
 Updates one or more lane colors.
 
 ```json
 // Request body
 { "colors": { "1": "Purple", "3": "Orange" } }
+
+// Response
+{ "ok": true }
+```
+
+### `POST /api/settings`
+Updates server settings. Persisted to `derby_config.json`.
+
+```json
+// Request body
+{ "videoReplayEnabled": false }
 
 // Response
 { "ok": true }
@@ -146,6 +175,8 @@ Connect to `ws://localhost:3000`. Every message is a JSON object that always inc
 | `finished` | — | All cars finished (or timeout elapsed) |
 | `reset` | — | Heat was reset; `state.heat` incremented |
 | `colors` | — | Lane colors were updated |
+| `settings` | — | Settings (e.g. `videoReplayEnabled`) were updated |
+| `clear` | — | Display was cleared; `state.videoUrl` is now null |
 | `video` | `videoUrl` | ZCam clip has been downloaded; `state.videoUrl` is now set |
 
 **Example client:**
@@ -163,10 +194,10 @@ ws.onmessage = (e) => {
 
 When the `--zcam <ip>` flag is provided, the server automatically:
 
-1. **Starts recording** the moment the first car crosses the finish line (first lane trigger)
+1. **Starts recording** the moment the first lane trigger fires
 2. **Stops recording** when the heat is complete (all lanes triggered or timeout)
-3. **Downloads the clip** from the camera's SD card to `public/videos/heat-N.ext`
-4. **Broadcasts** a `video` WebSocket event so all connected dashboards update immediately
+3. **Downloads the clip** from the camera's SD card to `public/videos/heat-N_TIMESTAMP.ext`
+4. **Broadcasts** a `video` WebSocket event so all connected dashboards update immediately (only when `videoReplayEnabled` is true)
 5. **Plays the clip** automatically on the guest display below the race results
 
 The camera must be reachable at the given IP address and in a record-ready state before each heat. The server uses the ZCam E2 HTTP API:
@@ -191,7 +222,7 @@ The camera must be reachable at the given IP address and in a record-ready state
 node server.js --zcam 10.98.32.1
 ```
 
-Downloaded clips are saved as `public/videos/heat-N.mov` (or `.mp4`) and served at `/videos/heat-N.mov`. They are cleared from the guest display on each heat reset.
+Downloaded clips are saved as `public/videos/heat-N_TIMESTAMP.mov` (or `.mp4`, e.g. `heat-3_2026-03-09_14-22-05.mov`) and served at `/videos/heat-N_TIMESTAMP.mov`. They are cleared from the guest display on each heat reset.
 
 ---
 
