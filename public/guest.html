@@ -333,7 +333,7 @@
         )
       }
 
-      function HeatVideo({ videoUrl }) {
+      function HeatVideo({ videoUrl, onEnded }) {
         const videoRef = useRef(null)
 
         useEffect(() => {
@@ -348,17 +348,13 @@
         if (!videoUrl) return null
 
         return (
-          <div className="border-t border-white/5 px-4 py-4 max-w-2xl mx-auto w-full">
-            <div className="font-condensed text-xs uppercase tracking-widest text-white/20 mb-3">
-              Heat Replay
-            </div>
+          <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
             <video
               ref={videoRef}
               src={videoUrl}
-              controls
               playsInline
-              loop
-              className="w-full rounded-xl border border-white/10"
+              onEnded={onEnded}
+              className="w-full h-full object-contain"
               style={{ background: '#000' }}
             />
           </div>
@@ -368,7 +364,31 @@
       function App() {
         const [state, setState] = useState(null)
         const [isNew, setIsNew] = useState(false)
+        const [showVideo, setShowVideo] = useState(false)
+        const [activeVideoUrl, setActiveVideoUrl] = useState(null)
         const wsRef = useRef(null)
+        const finishedAtRef = useRef(null)
+        const videoTimerRef = useRef(null)
+
+        // Hide overlay whenever the server clears videoUrl (reset)
+        useEffect(() => {
+          if (state && state.videoUrl === null) {
+            setShowVideo(false)
+            setActiveVideoUrl(null)
+            clearTimeout(videoTimerRef.current)
+            videoTimerRef.current = null
+            finishedAtRef.current = null
+          }
+        }, [state?.videoUrl])
+
+        // Allow Escape key to dismiss the video overlay
+        useEffect(() => {
+          function onKeyDown(e) {
+            if (e.key === 'Escape') setShowVideo(false)
+          }
+          window.addEventListener('keydown', onKeyDown)
+          return () => window.removeEventListener('keydown', onKeyDown)
+        }, [])
 
         useEffect(() => {
           function connect() {
@@ -380,6 +400,22 @@
               if (msg.type === 'finished') {
                 setIsNew(true)
                 setTimeout(() => setIsNew(false), 2000)
+                finishedAtRef.current = Date.now()
+              }
+              if (msg.type === 'video') {
+                const url = msg.state?.videoUrl
+                if (url) {
+                  const elapsed = finishedAtRef.current
+                    ? Date.now() - finishedAtRef.current
+                    : 0
+                  const delay = Math.max(0, 5000 - elapsed)
+                  clearTimeout(videoTimerRef.current)
+                  videoTimerRef.current = setTimeout(() => {
+                    videoTimerRef.current = null
+                    setActiveVideoUrl(url)
+                    setShowVideo(true)
+                  }, delay)
+                }
               }
             }
             ws.onclose = () => setTimeout(connect, 2000)
@@ -397,7 +433,7 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history, videoUrl, videoReplayEnabled } = state
+        const { finishOrder, laneColors, status, heat, history } = state
         const showResults = status === 'finished' && finishOrder.length > 0
 
         return (
@@ -441,8 +477,10 @@
               )}
             </main>
 
-            {/* Heat video replay */}
-            <HeatVideo videoUrl={videoReplayEnabled ? videoUrl : null} />
+            {/* Heat video replay — fullscreen overlay, auto-hides after one play */}
+            {showVideo && (
+              <HeatVideo videoUrl={activeVideoUrl} onEnded={() => setShowVideo(false)} />
+            )}
 
             {/* History */}
             {history.length > 0 && (
