@@ -21,18 +21,22 @@ function shuffle(arr) {
 /**
  * Creates a sensor manager that tracks race state.
  *
- * @param {object}   deps            - Dependencies
- * @param {object}   deps.opts       - Parsed CLI options (lanes, timeout, simulate)
- * @param {object}   deps.state      - Shared race state object (mutated in place)
- * @param {Function} deps.broadcast  - WebSocket broadcast function (type, payload?)
- * @param {Function} deps.onFinish   - Called when a heat completes (e.g. for CSV logging)
+ * @param {object}   deps                - Dependencies
+ * @param {object}   deps.opts           - Parsed CLI options (lanes, timeout, simulate)
+ * @param {object}   deps.state          - Shared race state object (mutated in place)
+ * @param {Function} deps.broadcast      - WebSocket broadcast function (type, payload?)
+ * @param {Function} deps.onFirstTrigger - Called when the very first lane triggers (optional)
+ * @param {Function} deps.onFinish       - Called when a heat completes (e.g. for CSV logging)
  * @returns {{ arm, reset, triggerLane }}
  */
-function createSensorManager({ opts, state, broadcast, onFinish }) {
+function createSensorManager({ opts, state, broadcast, onFirstTrigger, onFinish }) {
   let heatTimer = null
   const triggered = new Set()
 
   function arm() {
+    if (state.status === 'finished') {
+      state.heat++
+    }
     triggered.clear()
     state.finishOrder = []
     state.status = 'armed'
@@ -52,7 +56,6 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
     clearTimeout(heatTimer)
     state._startTime = null
     triggered.clear()
-    state.heat++
     state.finishOrder = []
     state.status = 'idle'
     broadcast('reset')
@@ -81,6 +84,8 @@ function createSensorManager({ opts, state, broadcast, onFinish }) {
     state.finishOrder.push({ lane, gapMs })
     broadcast('trigger', { lane, gapMs, place: state.finishOrder.length })
     console.log(`  Lane ${lane} finished! (+${gapMs.toFixed(1)} ms)`)
+
+    if (triggered.size === 1 && typeof onFirstTrigger === 'function') onFirstTrigger()
 
     if (triggered.size === opts.lanes) _finishHeat()
   }

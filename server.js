@@ -23,6 +23,7 @@ const WebSocket = require('ws')
 const path = require('path')
 const fs = require('fs')
 const { createSensorManager } = require('./gpio')
+const { createZCamManager } = require('./zcam')
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ function parseArgs() {
     timeout: DEFAULT_TIMEOUT,
     simulate: false,
     port: 3000,
+    zcamIp: null,
   }
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lanes' && args[i + 1]) opts.lanes = parseInt(args[++i])
@@ -47,6 +49,7 @@ function parseArgs() {
     else if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
     else if (args[i] === '--simulate') opts.simulate = true
+    else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
   }
   return opts
 }
@@ -64,6 +67,9 @@ let state = {
   laneColors: savedConfig.laneColors ?? buildDefaultColors(opts.lanes),
   numLanes: opts.lanes,
   history: [], // last 10 heats
+  videoUrl: null, // URL of the latest heat recording, or null
+  videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
+  zcamEnabled: !!opts.zcamIp, // whether ZCam integration is active
 }
 
 function buildDefaultColors(n) {
@@ -85,7 +91,11 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  const cfg = { heat: state.heat, laneColors: state.laneColors }
+  const cfg = {
+    heat: state.heat,
+    laneColors: state.laneColors,
+    videoReplayEnabled: state.videoReplayEnabled,
+  }
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
 }
 
@@ -128,13 +138,51 @@ function broadcast(type, payload = {}) {
   }
 }
 
+// ── ZCam ──────────────────────────────────────────────────────────────────────
+
+const zcam = opts.zcamIp
+  ? createZCamManager({
+      cameraIp: opts.zcamIp,
+      videoDir: path.join(__dirname, 'public', 'videos'),
+    })
+  : null
+
+if (zcam) {
+  console.log(`ZCam E2M4 integration enabled — camera at ${opts.zcamIp}`)
+  zcam.setup().catch((err) => console.error('ZCam: setup failed:', err.message))
+}
+
 // ── Sensor Manager ────────────────────────────────────────────────────────────
 
 const sensorManager = createSensorManager({
   opts,
   state,
   broadcast,
-  onFinish: () => logResult(),
+  onFirstTrigger: () => {
+    if (zcam) zcam.startRecording()
+  },
+  onFinish: () => {
+    logResult()
+    if (zcam) {
+      setTimeout(
+        () =>
+          zcam
+            .stopAndFetchVideo(state.heat)
+            .then((url) => {
+              if (url) {
+                state.videoUrl = url
+                if (state.videoReplayEnabled) {
+                  broadcast('video', { videoUrl: url })
+                }
+              }
+            })
+            .catch((err) => {
+              console.error('ZCam: video fetch error:', err.message)
+            }),
+        500,
+      )
+    }
+  },
 })
 
 // ── Express + WS ──────────────────────────────────────────────────────────────
@@ -148,6 +196,7 @@ app.get('/', (req, res) =>
 app.get('/manage', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'manage.html')),
 )
+app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
 
 app.get('/api/state', (req, res) => res.json(state))
 
@@ -159,6 +208,7 @@ app.post('/api/arm', (req, res) => {
 })
 
 app.post('/api/reset', (req, res) => {
+  state.videoUrl = null
   sensorManager.reset()
   res.json({ ok: true })
 })
@@ -180,7 +230,14 @@ app.post('/api/trigger', (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/clear-display', (req, res) => {
+  state.videoUrl = null
+  broadcast('clear')
+  res.json({ ok: true })
+})
+
 app.post('/api/reset-race', (req, res) => {
+  state.videoUrl = null
   sensorManager.reset()
   state.heat = 1
   state.history = []
@@ -195,6 +252,19 @@ app.post('/api/colors', (req, res) => {
   state.laneColors = { ...state.laneColors, ...colors }
   saveConfig()
   broadcast('colors')
+  res.json({ ok: true })
+})
+
+app.post('/api/settings', (req, res) => {
+  const { videoReplayEnabled } = req.body
+  if (typeof videoReplayEnabled !== 'boolean') {
+    return res
+      .status(400)
+      .json({ error: 'Missing or invalid videoReplayEnabled' })
+  }
+  state.videoReplayEnabled = videoReplayEnabled
+  saveConfig()
+  broadcast('settings')
   res.json({ ok: true })
 })
 
@@ -214,7 +284,12 @@ server.listen(opts.port, () => {
   console.log(
     `   Mode          : ${opts.simulate ? 'SIMULATION' : 'ESP32 SENSOR'}`,
   )
+  if (opts.zcamIp) {
+    console.log(`   ZCam E2M4     : http://${opts.zcamIp}`)
+  }
   console.log()
 })
 
-process.on('SIGINT', () => process.exit(0))
+process.on('SIGINT', () => {
+  process.exit(0)
+})
