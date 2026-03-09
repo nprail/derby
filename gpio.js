@@ -92,7 +92,6 @@ function createSensorManager({ opts, state, broadcast, onFirstTrigger, onFinish 
     if (sensors) for (const s of Object.values(sensors)) s.removeAllListeners('alert')
     state._startTime = null
     triggered.clear()
-    state.heat++
     state.finishOrder = []
     state.status = 'idle'
     broadcast('reset')

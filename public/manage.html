@@ -440,6 +440,12 @@
         }
 
         async function handleReset() {
+          if (
+            !confirm(
+              'Re-run this heat? The current results will not be counted and the heat number will not advance.',
+            )
+          )
+            return
           setLoading('reset')
           await api('/api/reset', {})
           setLoading('')
@@ -454,6 +460,12 @@
             return
           setLoading('reset-race')
           await api('/api/reset-race', {})
+          setLoading('')
+        }
+
+        async function handleClearDisplay() {
+          setLoading('clear')
+          await api('/api/clear-display', {})
           setLoading('')
         }
 
@@ -526,6 +538,18 @@
                       }}
                     >
                       {loading === 'reset' ? 'RESETTING…' : '↺  RESET HEAT'}
+                    </button>
+                    <button
+                      onClick={handleClearDisplay}
+                      disabled={status !== 'finished' || loading === 'clear'}
+                      className="w-full py-3 rounded-xl font-display text-2xl tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{
+                        background: 'rgba(99,102,241,0.1)',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        color: '#a5b4fc',
+                      }}
+                    >
+                      {loading === 'clear' ? 'CLEARING…' : '✕  CLEAR DISPLAY'}
                     </button>
                     <button
                       onClick={handleResetRace}

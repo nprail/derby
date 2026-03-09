@@ -205,6 +205,12 @@ app.post('/api/reset', (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/clear-display', (req, res) => {
+  state.videoUrl = null
+  broadcast('clear')
+  res.json({ ok: true })
+})
+
 app.post('/api/reset-race', (req, res) => {
   state.videoUrl = null
   sensorManager.reset()

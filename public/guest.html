@@ -384,6 +384,7 @@
         const [isNew, setIsNew] = useState(false)
         const [showVideo, setShowVideo] = useState(false)
         const [activeVideoUrl, setActiveVideoUrl] = useState(null)
+        const [displayCleared, setDisplayCleared] = useState(false)
         const wsRef = useRef(null)
         const finishedAtRef = useRef(null)
         const videoTimerRef = useRef(null)
@@ -420,8 +421,15 @@
               setState(msg.state)
               if (msg.type === 'finished') {
                 setIsNew(true)
+                setDisplayCleared(false)
                 setTimeout(() => setIsNew(false), 2000)
                 finishedAtRef.current = Date.now()
+              }
+              if (msg.type === 'armed' || msg.type === 'reset') {
+                setDisplayCleared(false)
+              }
+              if (msg.type === 'clear') {
+                setDisplayCleared(true)
               }
               if (msg.type === 'video') {
                 const url = msg.state?.videoUrl
@@ -458,7 +466,7 @@
           )
 
         const { finishOrder, laneColors, status, heat, history } = state
-        const showResults = status === 'finished' && finishOrder.length > 0
+        const showResults = status === 'finished' && finishOrder.length > 0 && !displayCleared
 
         return (
           <div className="relative min-h-screen flex flex-col">
