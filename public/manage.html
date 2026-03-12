@@ -322,6 +322,70 @@
         )
       }
 
+      function ZCamConfig({ zcamEnabled, zcamIp }) {
+        const [ip, setIp] = React.useState(zcamIp || '')
+        const [saving, setSaving] = React.useState(false)
+
+        React.useEffect(() => setIp(zcamIp || ''), [zcamIp])
+
+        async function handleSave() {
+          setSaving(true)
+          await api('/api/zcam', { ip: ip.trim() || null })
+          setSaving(false)
+        }
+
+        async function handleDisable() {
+          setSaving(true)
+          await api('/api/zcam', { ip: null })
+          setIp('')
+          setSaving(false)
+        }
+
+        return (
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-condensed text-xs font-semibold uppercase tracking-wider text-white/50">
+                ZCam IP
+              </span>
+              {zcamEnabled && (
+                <span className="font-condensed text-xs text-green-400">● active</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={ip}
+                onChange={(e) => setIp(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                placeholder="e.g. 10.98.32.1"
+                className="flex-1 min-w-0 px-3 py-2 rounded-lg font-condensed text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              />
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg font-condensed text-xs uppercase tracking-wider border transition disabled:opacity-30"
+                style={{
+                  background: 'rgba(99,102,241,0.2)',
+                  borderColor: 'rgba(99,102,241,0.4)',
+                  color: '#a5b4fc',
+                }}
+              >
+                {saving ? '…' : 'Save'}
+              </button>
+            </div>
+            {zcamEnabled && (
+              <button
+                onClick={handleDisable}
+                disabled={saving}
+                className="mt-1.5 w-full py-1 rounded font-condensed text-xs uppercase tracking-wider text-white/25 hover:text-red-400 transition disabled:opacity-30"
+              >
+                Disable ZCam
+              </button>
+            )}
+          </div>
+        )
+      }
+
       function ResultRow({ entry, place, laneColors }) {
         const colorName = laneColors[entry.lane] || 'White'
         const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
@@ -473,7 +537,7 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history, numLanes } =
+        const { finishOrder, laneColors, status, heat, history, numLanes, zcamEnabled, zcamIp } =
           state
 
         async function handleArm() {
@@ -612,12 +676,14 @@
                   </div>
                 </div>
 
-                {/* Video Replay Toggle */}
-                {state.zcamEnabled && (
-                  <div>
-                    <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
-                      Camera
-                    </div>
+                {/* Camera / ZCam Configuration */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Camera
+                  </div>
+                  <ZCamConfig zcamEnabled={zcamEnabled} zcamIp={zcamIp} />
+                  {/* Video Replay Toggle — only when ZCam is active */}
+                  {zcamEnabled && (
                     <button
                       onClick={handleToggleVideoReplay}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all"
@@ -662,8 +728,8 @@
                         />
                       </div>
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Lane Colors */}
                 <div>
