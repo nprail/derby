@@ -69,7 +69,8 @@ let state = {
   history: [], // last 10 heats
   videoUrl: null, // URL of the latest heat recording, or null
   videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
-  zcamEnabled: !!opts.zcamIp, // whether ZCam integration is active
+  zcamEnabled: !!(opts.zcamIp ?? savedConfig.zcamIp), // whether ZCam integration is active
+  zcamIp: opts.zcamIp ?? savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
 }
 
 function buildDefaultColors(n) {
@@ -95,6 +96,7 @@ function saveConfig() {
     heat: state.heat,
     laneColors: state.laneColors,
     videoReplayEnabled: state.videoReplayEnabled,
+    zcamIp: state.zcamIp ?? null,
   }
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
 }
@@ -140,17 +142,30 @@ function broadcast(type, payload = {}) {
 
 // ── ZCam ──────────────────────────────────────────────────────────────────────
 
-const zcam = opts.zcamIp
-  ? createZCamManager({
-      cameraIp: opts.zcamIp,
-      videoDir: path.join(__dirname, 'public', 'videos'),
-    })
-  : null
+let zcam = null
 
-if (zcam) {
-  console.log(`ZCam E2M4 integration enabled — camera at ${opts.zcamIp}`)
+function initZCam(ip) {
+  if (zcam) {
+    zcam.disconnect().catch(() => {})
+    zcam = null
+  }
+  const cleanIp = ip ? String(ip).trim() : null
+  if (!cleanIp) {
+    state.zcamEnabled = false
+    state.zcamIp = null
+    return
+  }
+  zcam = createZCamManager({
+    cameraIp: cleanIp,
+    videoDir: path.join(__dirname, 'public', 'videos'),
+  })
+  state.zcamEnabled = true
+  state.zcamIp = cleanIp
+  console.log(`ZCam E2M4 integration enabled — camera at ${cleanIp}`)
   zcam.setup().catch((err) => console.error('ZCam: setup failed:', err.message))
 }
+
+initZCam(state.zcamIp)
 
 // ── Sensor Manager ────────────────────────────────────────────────────────────
 
@@ -266,6 +281,17 @@ app.post('/api/settings', (req, res) => {
   saveConfig()
   broadcast('settings')
   res.json({ ok: true })
+})
+
+app.post('/api/zcam', (req, res) => {
+  const { ip } = req.body
+  if (ip !== null && ip !== undefined && typeof ip !== 'string') {
+    return res.status(400).json({ error: 'ip must be a string or null' })
+  }
+  initZCam(ip || null)
+  saveConfig()
+  broadcast('settings')
+  res.json({ ok: true, zcamEnabled: state.zcamEnabled, zcamIp: state.zcamIp })
 })
 
 const server = http.createServer(app)
