@@ -271,6 +271,64 @@
         )
       }
 
+      function RacingCard({ lane, laneColors }) {
+        const colorName = laneColors[lane] || 'White'
+        const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+
+        return (
+          <div
+            className="lane-card relative rounded-2xl border-2 overflow-hidden slide-in"
+            style={{
+              background: palette.bg,
+              borderColor: palette.border + '40',
+              boxShadow: `0 0 12px ${palette.glow}20`,
+              opacity: 0.45,
+            }}
+          >
+            <div className="track-stripe absolute inset-0 opacity-100 pointer-events-none" />
+
+            <div className="relative flex items-center gap-4 px-5 py-4">
+              {/* Place badge */}
+              <div className="flex-shrink-0 text-center w-16">
+                <div
+                  className="font-display text-5xl leading-none"
+                  style={{ color: palette.text, opacity: 0.2 }}
+                >
+                  —
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div
+                className="w-px self-stretch opacity-20"
+                style={{ background: palette.border }}
+              />
+
+              {/* Lane info */}
+              <div className="flex-1">
+                <div
+                  className="font-condensed text-xs font-semibold tracking-widest uppercase opacity-50 mb-0.5"
+                  style={{ color: palette.text }}
+                >
+                  Lane {lane}
+                </div>
+                <div
+                  className="font-display text-4xl leading-none font-semibold"
+                  style={{ color: palette.text }}
+                >
+                  {colorName}
+                </div>
+              </div>
+
+              {/* Racing indicator */}
+              <div className="font-condensed text-sm tracking-widest uppercase text-green-500 animate-pulse">
+                racing
+              </div>
+            </div>
+          </div>
+        )
+      }
+
       function WaitingState({ status }) {
         return (
           <div className="flex flex-col items-center justify-center py-20 gap-6">
@@ -465,8 +523,12 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history } = state
-        const showResults = status === 'finished' && finishOrder.length > 0 && !displayCleared
+        const { finishOrder, laneColors, status, heat, history, numLanes } =
+          state
+        const showResults =
+          (status === 'finished' ||
+            (status === 'armed' && finishOrder.length > 0)) &&
+          !displayCleared
 
         return (
           <div className="relative min-h-screen flex flex-col">
@@ -496,7 +558,7 @@
                 <div className="flex flex-col gap-3">
                   {finishOrder.map((entry, i) => (
                     <PlaceCard
-                      key={entry.lane}
+                      key={`f-${entry.lane}`}
                       entry={entry}
                       place={i}
                       laneColors={laneColors}

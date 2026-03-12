@@ -51,14 +51,16 @@ const int LANE_PINS[NUM_LANES] = { 25, 26, 32, 33 };
 
 // ── ISR State ─────────────────────────────────────────────────────────────────
 
-// Written exclusively by ISRs — must be volatile.
-volatile int64_t isrTimestamps[NUM_LANES * 4]; // ring buffer (generous sizing)
-volatile int     isrLanes[NUM_LANES * 4];      // 1-indexed lane number
-volatile int     isrCount        = 0;          // total entries written by ISRs
-volatile int64_t laneLastEdge[NUM_LANES];      // debounce timestamp per lane
+// Circular ring buffer — ISR produces, main loop consumes.
+// Size must be a power of 2 so (x & ISR_BUF_MASK) replaces modulo in ISR code.
+#define ISR_BUF_SIZE  16
+#define ISR_BUF_MASK  (ISR_BUF_SIZE - 1)
 
-// Read only by the main loop.
-int reportedCount = 0;
+volatile int64_t isrTimestamps[ISR_BUF_SIZE]; // 1-indexed lane number
+volatile int     isrLanes[ISR_BUF_SIZE];      // 1-indexed lane number
+volatile int     isrHead = 0;                 // next write slot  (ISR-owned)
+volatile int     isrTail = 0;                 // next read  slot  (main-loop-owned)
+volatile int64_t laneLastEdge[NUM_LANES];     // debounce timestamp per lane
 
 // ── ISR Handlers ──────────────────────────────────────────────────────────────
 
@@ -68,9 +70,12 @@ void IRAM_ATTR handleLaneISR(int idx) {
 
   laneLastEdge[idx] = now;
 
-  int pos            = isrCount++;  // safe atomic increment on 32-bit Xtensa
-  isrTimestamps[pos] = now;
-  isrLanes[pos]      = idx + 1;    // convert to 1-indexed lane number
+  int head = isrHead;
+  int next = (head + 1) & ISR_BUF_MASK;
+  if (next == isrTail) return;      // buffer full — drop trigger, main loop is slow
+  isrTimestamps[head] = now;
+  isrLanes[head]      = idx + 1;   // convert to 1-indexed lane number
+  isrHead             = next;      // commit write last so consumer sees complete entry
 }
 
 void IRAM_ATTR isrLane0() { handleLaneISR(0); }
@@ -144,20 +149,22 @@ void setup() {
 }
 
 void loop() {
-  // Drain the trigger queue: report any entries the ISR has added since the
-  // last loop iteration.  isrCount is a volatile int — snapshot read is safe
-  // on ESP32's 32-bit Xtensa core.
-  int captured = isrCount;
-  while (reportedCount < captured) {
-    int i = reportedCount;
+  // Drain the ring buffer: consume every entry the ISR has produced.
+  // Advance isrTail first (freeing the slot) so the ISR can keep writing
+  // into reclaimed slots while we are blocked on the network.
+  while (isrTail != isrHead) {
+    int     i    = isrTail;
+    int     lane = isrLanes[i];
+    int64_t ts   = isrTimestamps[i];
+    isrTail = (isrTail + 1) & ISR_BUF_MASK; // free slot before slow POST
+
     bool ok = false;
     for (int attempt = 0; attempt < 3 && !ok; attempt++) {
-      ok = postTrigger(isrLanes[i], isrTimestamps[i]);
+      ok = postTrigger(lane, ts);
       if (!ok) delay(100);
     }
     if (!ok) {
-      Serial.printf("[trigger] Lane %d giving up after 3 attempts\n", isrLanes[i]);
+      Serial.printf("[trigger] Lane %d giving up after 3 attempts\n", lane);
     }
-    reportedCount++;
   }
 }

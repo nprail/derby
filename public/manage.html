@@ -371,6 +371,49 @@
         )
       }
 
+      function RacingLaneRow({ lane, laneColors }) {
+        const colorName = laneColors[lane] || 'White'
+        const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+        return (
+          <div
+            className="flex items-center gap-3 rounded-lg px-3 py-2 border"
+            style={{
+              background: palette.bg,
+              borderColor: palette.border + '30',
+              opacity: 0.5,
+            }}
+          >
+            <div
+              className="font-display text-3xl w-14 text-center"
+              style={{ color: palette.text, opacity: 0.2 }}
+            >
+              —
+            </div>
+            <div
+              className="w-px self-stretch opacity-20"
+              style={{ background: palette.border }}
+            />
+            <div className="flex-1">
+              <div
+                className="font-condensed text-xs opacity-40 uppercase tracking-widest"
+                style={{ color: palette.text }}
+              >
+                Lane {lane}
+              </div>
+              <div
+                className="font-display text-xl"
+                style={{ color: palette.text }}
+              >
+                {colorName}
+              </div>
+            </div>
+            <div className="font-condensed text-xs tracking-widest uppercase text-green-500 animate-pulse">
+              racing
+            </div>
+          </div>
+        )
+      }
+
       function StatusBadge({ status }) {
         const map = {
           idle: {
@@ -655,7 +698,29 @@
                     )}
                   </div>
 
-                  {finishOrder.length > 0 ? (
+                  {status === 'armed' ? (
+                    <div className="flex flex-col gap-2">
+                      {finishOrder.map((entry, i) => (
+                        <ResultRow
+                          key={`f-${entry.lane}`}
+                          entry={entry}
+                          place={i}
+                          laneColors={laneColors}
+                        />
+                      ))}
+                      {Array.from({ length: numLanes }, (_, i) => i + 1)
+                        .filter(
+                          (lane) => !finishOrder.some((e) => e.lane === lane),
+                        )
+                        .map((lane) => (
+                          <RacingLaneRow
+                            key={`r-${lane}`}
+                            lane={lane}
+                            laneColors={laneColors}
+                          />
+                        ))}
+                    </div>
+                  ) : finishOrder.length > 0 ? (
                     <div className="flex flex-col gap-2">
                       {finishOrder.map((entry, i) => (
                         <ResultRow
@@ -668,15 +733,9 @@
                     </div>
                   ) : (
                     <div className="rounded-xl border border-white/5 p-8 text-center">
-                      {status === 'armed' ? (
-                        <div className="font-display text-xl text-green-500/50 tracking-widest">
-                          WAITING FOR CARS…
-                        </div>
-                      ) : (
-                        <div className="font-display text-xl text-white/20 tracking-widest">
-                          NO RESULTS YET
-                        </div>
-                      )}
+                      <div className="font-display text-xl text-white/20 tracking-widest">
+                        NO RESULTS YET
+                      </div>
                     </div>
                   )}
                 </div>
