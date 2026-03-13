@@ -322,6 +322,206 @@
         )
       }
 
+      function SensorConfig({ sensorMode }) {
+        const [saving, setSaving] = React.useState(false)
+        const modes = [
+          { id: 'gpio', label: 'GPIO', desc: 'Raspberry Pi pigpio' },
+          { id: 'esp32', label: 'ESP32', desc: 'WiFi sensor node' },
+          { id: 'simulate', label: 'Simulate', desc: 'Simulated race' },
+        ]
+
+        async function handleSelect(mode) {
+          if (mode === sensorMode || saving) return
+          setSaving(true)
+          try {
+            await api('/api/settings', { sensorMode: mode })
+          } catch (err) {
+            console.error('Failed to change sensor mode:', err)
+          } finally {
+            setSaving(false)
+          }
+        }
+
+        return (
+          <div className="flex flex-col gap-1.5">
+            {modes.map(({ id, label, desc }) => (
+              <button
+                key={id}
+                onClick={() => handleSelect(id)}
+                disabled={saving}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all disabled:opacity-30"
+                style={{
+                  background:
+                    sensorMode === id
+                      ? 'rgba(99,102,241,0.12)'
+                      : 'rgba(255,255,255,0.03)',
+                  borderColor:
+                    sensorMode === id
+                      ? 'rgba(99,102,241,0.5)'
+                      : 'rgba(255,255,255,0.1)',
+                }}
+              >
+                <div className="text-left">
+                  <div
+                    className="font-condensed text-sm font-semibold uppercase tracking-widest"
+                    style={{
+                      color:
+                        sensorMode === id ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                    }}
+                  >
+                    {label}
+                  </div>
+                  <div className="font-condensed text-xs text-white/20 mt-0.5">
+                    {desc}
+                  </div>
+                </div>
+                {sensorMode === id && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+        )
+      }
+
+      function LaneCountConfig({ numLanes }) {
+        const [saving, setSaving] = React.useState(false)
+        const options = [2, 3, 4, 5, 6]
+
+        async function handleSelect(n) {
+          if (n === numLanes || saving) return
+          setSaving(true)
+          try {
+            await api('/api/settings', { numLanes: n })
+          } catch (err) {
+            console.error('Failed to change lane count:', err)
+          } finally {
+            setSaving(false)
+          }
+        }
+
+        return (
+          <div className="flex gap-2">
+            {options.map((n) => (
+              <button
+                key={n}
+                onClick={() => handleSelect(n)}
+                disabled={saving}
+                className="flex-1 py-2 rounded-xl border font-display text-xl tracking-widest transition-all disabled:opacity-30"
+                style={{
+                  background: numLanes === n ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                  borderColor: numLanes === n ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)',
+                  color: numLanes === n ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        )
+      }
+
+      function TimeoutConfig({ timeout }) {
+        const [saving, setSaving] = React.useState(false)
+        const options = [5, 8, 10, 15, 20]
+
+        async function handleSelect(t) {
+          if (t === timeout || saving) return
+          setSaving(true)
+          try {
+            await api('/api/settings', { timeout: t })
+          } catch (err) {
+            console.error('Failed to change timeout:', err)
+          } finally {
+            setSaving(false)
+          }
+        }
+
+        return (
+          <div className="flex gap-2">
+            {options.map((t) => (
+              <button
+                key={t}
+                onClick={() => handleSelect(t)}
+                disabled={saving}
+                className="flex-1 py-2 rounded-xl border font-display text-xl tracking-widest transition-all disabled:opacity-30"
+                style={{
+                  background: timeout === t ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                  borderColor: timeout === t ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)',
+                  color: timeout === t ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )
+      }
+
+      function ZCamConfig({ zcamEnabled, zcamIp }) {
+        const [ip, setIp] = React.useState(zcamIp || '')
+        const [saving, setSaving] = React.useState(false)
+
+        React.useEffect(() => setIp(zcamIp || ''), [zcamIp])
+
+        async function handleSave() {
+          setSaving(true)
+          await api('/api/settings', { zcamIp: ip.trim() || null })
+          setSaving(false)
+        }
+
+        async function handleDisable() {
+          setSaving(true)
+          await api('/api/settings', { zcamIp: null })
+          setIp('')
+          setSaving(false)
+        }
+
+        return (
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-condensed text-xs font-semibold uppercase tracking-wider text-white/50">
+                ZCam IP
+              </span>
+              {zcamEnabled && (
+                <span className="font-condensed text-xs text-green-400">● active</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={ip}
+                onChange={(e) => setIp(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                placeholder="e.g. 10.98.32.1"
+                className="flex-1 min-w-0 px-3 py-2 rounded-lg font-condensed text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              />
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg font-condensed text-xs uppercase tracking-wider border transition disabled:opacity-30"
+                style={{
+                  background: 'rgba(99,102,241,0.2)',
+                  borderColor: 'rgba(99,102,241,0.4)',
+                  color: '#a5b4fc',
+                }}
+              >
+                {saving ? '…' : 'Save'}
+              </button>
+            </div>
+            {zcamEnabled && (
+              <button
+                onClick={handleDisable}
+                disabled={saving}
+                className="mt-1.5 w-full py-1 rounded font-condensed text-xs uppercase tracking-wider text-white/25 hover:text-red-400 transition disabled:opacity-30"
+              >
+                Disable ZCam
+              </button>
+            )}
+          </div>
+        )
+      }
+
       function ResultRow({ entry, place, laneColors }) {
         const colorName = laneColors[entry.lane] || 'White'
         const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
@@ -371,6 +571,49 @@
         )
       }
 
+      function RacingLaneRow({ lane, laneColors }) {
+        const colorName = laneColors[lane] || 'White'
+        const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+        return (
+          <div
+            className="flex items-center gap-3 rounded-lg px-3 py-2 border"
+            style={{
+              background: palette.bg,
+              borderColor: palette.border + '30',
+              opacity: 0.5,
+            }}
+          >
+            <div
+              className="font-display text-3xl w-14 text-center"
+              style={{ color: palette.text, opacity: 0.2 }}
+            >
+              —
+            </div>
+            <div
+              className="w-px self-stretch opacity-20"
+              style={{ background: palette.border }}
+            />
+            <div className="flex-1">
+              <div
+                className="font-condensed text-xs opacity-40 uppercase tracking-widest"
+                style={{ color: palette.text }}
+              >
+                Lane {lane}
+              </div>
+              <div
+                className="font-display text-xl"
+                style={{ color: palette.text }}
+              >
+                {colorName}
+              </div>
+            </div>
+            <div className="font-condensed text-xs tracking-widest uppercase text-green-500 animate-pulse">
+              racing
+            </div>
+          </div>
+        )
+      }
+
       function StatusBadge({ status }) {
         const map = {
           idle: {
@@ -405,9 +648,120 @@
         )
       }
 
+      function SettingsModal({ state, onClose }) {
+        const { numLanes, laneColors, sensorMode, zcamEnabled, zcamIp, videoReplayEnabled, timeout } = state
+
+        async function handleColorSave(lane, color) {
+          await api('/api/settings', { colors: { [lane]: color } })
+        }
+
+        async function handleToggleVideoReplay() {
+          await api('/api/settings', { videoReplayEnabled: !videoReplayEnabled })
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative ml-auto w-full max-w-sm flex flex-col bg-[#0e0e14] border-l border-white/10 overflow-y-auto">
+              <div className="sticky top-0 bg-[#0e0e14] border-b border-white/5 px-5 py-4 flex items-center justify-between z-10">
+                <div className="font-display text-2xl tracking-widest">SETTINGS</div>
+                <button
+                  onClick={onClose}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition font-condensed text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex flex-col gap-5 p-5">
+                {/* Sensor Mode */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Sensor Mode
+                  </div>
+                  <SensorConfig sensorMode={sensorMode} />
+                </div>
+
+                {/* Camera */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Camera
+                  </div>
+                  <ZCamConfig zcamEnabled={zcamEnabled} zcamIp={zcamIp} />
+                  {zcamEnabled && (
+                    <button
+                      onClick={handleToggleVideoReplay}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all"
+                      style={{
+                        background: videoReplayEnabled ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                        borderColor: videoReplayEnabled ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      <div className="text-left">
+                        <div
+                          className="font-condensed text-sm font-semibold uppercase tracking-widest"
+                          style={{ color: videoReplayEnabled ? '#a5b4fc' : 'rgba(255,255,255,0.3)' }}
+                        >
+                          Video Replay
+                        </div>
+                        <div className="font-condensed text-xs text-white/20 mt-0.5">
+                          Show heat recording on guest display
+                        </div>
+                      </div>
+                      <div
+                        className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+                        style={{ background: videoReplayEnabled ? '#6366f1' : 'rgba(255,255,255,0.1)' }}
+                      >
+                        <div
+                          className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+                          style={{ left: videoReplayEnabled ? '22px' : '2px' }}
+                        />
+                      </div>
+                    </button>
+                  )}
+                </div>
+
+                {/* Timeout */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Heat Timeout (seconds)
+                  </div>
+                  <TimeoutConfig timeout={timeout} />
+                </div>
+
+                {/* Lane Count */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Lane Count
+                  </div>
+                  <LaneCountConfig numLanes={numLanes} />
+                </div>
+
+                {/* Lane Colors */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Lane Colors
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {Array.from({ length: numLanes }, (_, i) => i + 1).map((lane) => (
+                      <LaneConfig
+                        key={lane}
+                        lane={lane}
+                        currentColor={laneColors[lane] || 'White'}
+                        onSave={handleColorSave}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
       function App() {
         const [state, setState] = useState(null)
         const [loading, setLoading] = useState('')
+        const [settingsOpen, setSettingsOpen] = useState(false)
         const wsRef = useRef(null)
 
         useEffect(() => {
@@ -430,8 +784,7 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history, numLanes } =
-          state
+        const { finishOrder, laneColors, status, heat, history, numLanes } = state
 
         async function handleArm() {
           setLoading('arm')
@@ -469,17 +822,6 @@
           setLoading('')
         }
 
-        async function handleColorSave(lane, color) {
-          const colors = { [lane]: color }
-          await api('/api/colors', { colors })
-        }
-
-        async function handleToggleVideoReplay() {
-          await api('/api/settings', {
-            videoReplayEnabled: !state.videoReplayEnabled,
-          })
-        }
-
         return (
           <div className="min-h-screen flex flex-col">
             {/* Header */}
@@ -500,9 +842,17 @@
                     {heat}
                   </span>
                 </div>
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 transition"
+                  title="Settings"
+                >
+                  ⚙
+                </button>
               </div>
             </header>
 
+            {settingsOpen && <SettingsModal state={state} onClose={() => setSettingsOpen(false)} />}
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-0">
               {/* Left: Controls + Lane Config */}
               <div className="lg:col-span-1 border-r border-white/5 p-5 flex flex-col gap-5">
@@ -568,78 +918,6 @@
                     </button>
                   </div>
                 </div>
-
-                {/* Video Replay Toggle */}
-                {state.zcamEnabled && (
-                  <div>
-                    <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
-                      Camera
-                    </div>
-                    <button
-                      onClick={handleToggleVideoReplay}
-                      className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all"
-                      style={{
-                        background: state.videoReplayEnabled
-                          ? 'rgba(99,102,241,0.12)'
-                          : 'rgba(255,255,255,0.03)',
-                        borderColor: state.videoReplayEnabled
-                          ? 'rgba(99,102,241,0.5)'
-                          : 'rgba(255,255,255,0.1)',
-                      }}
-                    >
-                      <div className="text-left">
-                        <div
-                          className="font-condensed text-sm font-semibold uppercase tracking-widest"
-                          style={{
-                            color: state.videoReplayEnabled
-                              ? '#a5b4fc'
-                              : 'rgba(255,255,255,0.3)',
-                          }}
-                        >
-                          Video Replay
-                        </div>
-                        <div className="font-condensed text-xs text-white/20 mt-0.5">
-                          Show heat recording on guest display
-                        </div>
-                      </div>
-                      {/* Toggle pill */}
-                      <div
-                        className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
-                        style={{
-                          background: state.videoReplayEnabled
-                            ? '#6366f1'
-                            : 'rgba(255,255,255,0.1)',
-                        }}
-                      >
-                        <div
-                          className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
-                          style={{
-                            left: state.videoReplayEnabled ? '22px' : '2px',
-                          }}
-                        />
-                      </div>
-                    </button>
-                  </div>
-                )}
-
-                {/* Lane Colors */}
-                <div>
-                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
-                    Lane Colors
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {Array.from({ length: numLanes }, (_, i) => i + 1).map(
-                      (lane) => (
-                        <LaneConfig
-                          key={lane}
-                          lane={lane}
-                          currentColor={laneColors[lane] || 'White'}
-                          onSave={handleColorSave}
-                        />
-                      ),
-                    )}
-                  </div>
-                </div>
               </div>
 
               {/* Right: Results + History */}
@@ -655,7 +933,29 @@
                     )}
                   </div>
 
-                  {finishOrder.length > 0 ? (
+                  {status === 'armed' ? (
+                    <div className="flex flex-col gap-2">
+                      {finishOrder.map((entry, i) => (
+                        <ResultRow
+                          key={`f-${entry.lane}`}
+                          entry={entry}
+                          place={i}
+                          laneColors={laneColors}
+                        />
+                      ))}
+                      {Array.from({ length: numLanes }, (_, i) => i + 1)
+                        .filter(
+                          (lane) => !finishOrder.some((e) => e.lane === lane),
+                        )
+                        .map((lane) => (
+                          <RacingLaneRow
+                            key={`r-${lane}`}
+                            lane={lane}
+                            laneColors={laneColors}
+                          />
+                        ))}
+                    </div>
+                  ) : finishOrder.length > 0 ? (
                     <div className="flex flex-col gap-2">
                       {finishOrder.map((entry, i) => (
                         <ResultRow
@@ -668,15 +968,9 @@
                     </div>
                   ) : (
                     <div className="rounded-xl border border-white/5 p-8 text-center">
-                      {status === 'armed' ? (
-                        <div className="font-display text-xl text-green-500/50 tracking-widest">
-                          WAITING FOR CARS…
-                        </div>
-                      ) : (
-                        <div className="font-display text-xl text-white/20 tracking-widest">
-                          NO RESULTS YET
-                        </div>
-                      )}
+                      <div className="font-display text-xl text-white/20 tracking-widest">
+                        NO RESULTS YET
+                      </div>
                     </div>
                   )}
                 </div>
