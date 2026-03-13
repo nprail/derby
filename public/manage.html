@@ -458,7 +458,44 @@
         )
       }
 
-      function ZCamConfig({ zcamEnabled, zcamIp }) {
+      function VideoReplayDelayConfig({ videoReplayDelay }) {
+        const [saving, setSaving] = React.useState(false)
+        const options = [0, 3, 5, 8, 10]
+
+        async function handleSelect(d) {
+          if (d === videoReplayDelay || saving) return
+          setSaving(true)
+          try {
+            await api('/api/settings', { videoReplayDelay: d })
+          } catch (err) {
+            console.error('Failed to change video replay delay:', err)
+          } finally {
+            setSaving(false)
+          }
+        }
+
+        return (
+          <div className="flex gap-2">
+            {options.map((d) => (
+              <button
+                key={d}
+                onClick={() => handleSelect(d)}
+                disabled={saving}
+                className="flex-1 py-2 rounded-xl border font-display text-xl tracking-widest transition-all disabled:opacity-30"
+                style={{
+                  background: videoReplayDelay === d ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
+                  borderColor: videoReplayDelay === d ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.1)',
+                  color: videoReplayDelay === d ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                }}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        )
+      }
+
+
         const [ip, setIp] = React.useState(zcamIp || '')
         const [saving, setSaving] = React.useState(false)
 
@@ -649,7 +686,7 @@
       }
 
       function SettingsModal({ state, onClose }) {
-        const { numLanes, laneColors, sensorMode, zcamEnabled, zcamIp, videoReplayEnabled, timeout } = state
+        const { numLanes, laneColors, sensorMode, zcamEnabled, zcamIp, videoReplayEnabled, videoReplayDelay, timeout } = state
 
         async function handleColorSave(lane, color) {
           await api('/api/settings', { colors: { [lane]: color } })
@@ -717,6 +754,14 @@
                         />
                       </div>
                     </button>
+                  )}
+                  {zcamEnabled && videoReplayEnabled && (
+                    <div className="mt-3">
+                      <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-2">
+                        Replay Delay (seconds)
+                      </div>
+                      <VideoReplayDelayConfig videoReplayDelay={videoReplayDelay} />
+                    </div>
                   )}
                 </div>
 
