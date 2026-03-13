@@ -29,6 +29,7 @@ const { createZCamManager } = require('./zcam')
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT = 8
+const DEFAULT_VIDEO_REPLAY_DELAY = 5
 const LOG_FILE = 'derby_results.csv'
 const CONFIG_FILE = 'derby_config.json'
 
@@ -62,6 +63,7 @@ let state = {
   history: [], // last 10 heats
   videoUrl: null, // URL of the latest heat recording, or null
   videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
+  videoReplayDelay: savedConfig.videoReplayDelay ?? DEFAULT_VIDEO_REPLAY_DELAY, // seconds before replay starts
   zcamEnabled: !!(savedConfig.zcamIp), // whether ZCam integration is active
   zcamIp: savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
   sensorMode: savedConfig.sensorMode ?? 'simulate', // 'gpio' | 'esp32' | 'simulate'
@@ -92,6 +94,7 @@ function saveConfig() {
     numLanes: state.numLanes,
     timeout: state.timeout,
     videoReplayEnabled: state.videoReplayEnabled,
+    videoReplayDelay: state.videoReplayDelay,
     zcamIp: state.zcamIp ?? null,
     sensorMode: state.sensorMode,
   }
@@ -278,7 +281,7 @@ app.post('/api/reset-race', (req, res) => {
 })
 
 app.post('/api/settings', (req, res) => {
-  const { colors, videoReplayEnabled, numLanes, timeout, zcamIp, sensorMode } = req.body
+  const { colors, videoReplayEnabled, videoReplayDelay, numLanes, timeout, zcamIp, sensorMode } = req.body
 
   if (state.status === 'armed' && (numLanes !== undefined || sensorMode !== undefined)) {
     return res.status(400).json({ error: 'Cannot change lane count or sensor mode while armed' })
@@ -292,6 +295,11 @@ app.post('/api/settings', (req, res) => {
     if (typeof videoReplayEnabled !== 'boolean')
       return res.status(400).json({ error: 'videoReplayEnabled must be a boolean' })
     state.videoReplayEnabled = videoReplayEnabled
+  }
+  if (videoReplayDelay !== undefined) {
+    if (typeof videoReplayDelay !== 'number' || videoReplayDelay < 0)
+      return res.status(400).json({ error: 'videoReplayDelay must be a non-negative number' })
+    state.videoReplayDelay = videoReplayDelay
   }
   if (numLanes !== undefined) {
     if (!Number.isInteger(numLanes) || numLanes < 1 || numLanes > 8)
