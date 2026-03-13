@@ -322,6 +322,68 @@
         )
       }
 
+      function SensorConfig({ sensorMode }) {
+        const [saving, setSaving] = React.useState(false)
+        const modes = [
+          { id: 'gpio', label: 'GPIO', desc: 'Raspberry Pi pigpio' },
+          { id: 'esp32', label: 'ESP32', desc: 'WiFi sensor node' },
+          { id: 'simulate', label: 'Simulate', desc: 'Simulated race' },
+        ]
+
+        async function handleSelect(mode) {
+          if (mode === sensorMode || saving) return
+          setSaving(true)
+          try {
+            await api('/api/sensor', { mode })
+          } catch (err) {
+            console.error('Failed to change sensor mode:', err)
+          } finally {
+            setSaving(false)
+          }
+        }
+
+        return (
+          <div className="flex flex-col gap-1.5">
+            {modes.map(({ id, label, desc }) => (
+              <button
+                key={id}
+                onClick={() => handleSelect(id)}
+                disabled={saving}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all disabled:opacity-30"
+                style={{
+                  background:
+                    sensorMode === id
+                      ? 'rgba(99,102,241,0.12)'
+                      : 'rgba(255,255,255,0.03)',
+                  borderColor:
+                    sensorMode === id
+                      ? 'rgba(99,102,241,0.5)'
+                      : 'rgba(255,255,255,0.1)',
+                }}
+              >
+                <div className="text-left">
+                  <div
+                    className="font-condensed text-sm font-semibold uppercase tracking-widest"
+                    style={{
+                      color:
+                        sensorMode === id ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                    }}
+                  >
+                    {label}
+                  </div>
+                  <div className="font-condensed text-xs text-white/20 mt-0.5">
+                    {desc}
+                  </div>
+                </div>
+                {sensorMode === id && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+        )
+      }
+
       function ZCamConfig({ zcamEnabled, zcamIp }) {
         const [ip, setIp] = React.useState(zcamIp || '')
         const [saving, setSaving] = React.useState(false)
@@ -537,7 +599,7 @@
             </div>
           )
 
-        const { finishOrder, laneColors, status, heat, history, numLanes, zcamEnabled, zcamIp } =
+        const { finishOrder, laneColors, status, heat, history, numLanes, zcamEnabled, zcamIp, sensorMode } =
           state
 
         async function handleArm() {
@@ -674,6 +736,14 @@
                         : '⚠ Reset Entire Race'}
                     </button>
                   </div>
+                </div>
+
+                {/* Sensor Mode */}
+                <div>
+                  <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                    Sensor Mode
+                  </div>
+                  <SensorConfig sensorMode={sensorMode} />
                 </div>
 
                 {/* Camera / ZCam Configuration */}

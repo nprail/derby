@@ -45,6 +45,8 @@ function parseArgs() {
     port: 3000,
     sensor: 'gpio', // 'gpio' | 'esp32'
     zcamIp: null,
+    _sensorExplicit: false,
+    _simulateExplicit: false,
   }
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lanes' && args[i + 1]) opts.lanes = parseInt(args[++i])
@@ -52,11 +54,22 @@ function parseArgs() {
       opts.timeout = parseFloat(args[++i])
     else if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
-    else if (args[i] === '--simulate') opts.simulate = true
-    else if (args[i] === '--sensor' && args[i + 1]) opts.sensor = args[++i]
-    else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
+    else if (args[i] === '--simulate') {
+      opts.simulate = true
+      opts._simulateExplicit = true
+    } else if (args[i] === '--sensor' && args[i + 1]) {
+      opts.sensor = args[++i]
+      opts._sensorExplicit = true
+    } else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
   }
   return opts
+}
+
+// Resolve sensor mode: explicit CLI flags beat saved config, which beats defaults.
+function computeSensorMode(opts, savedConfig) {
+  if (opts._simulateExplicit) return 'simulate'
+  if (opts._sensorExplicit) return opts.sensor
+  return savedConfig.sensorMode ?? (opts.simulate ? 'simulate' : opts.sensor)
 }
 
 // ── Race State ────────────────────────────────────────────────────────────────
@@ -76,6 +89,7 @@ let state = {
   videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
   zcamEnabled: !!(opts.zcamIp ?? savedConfig.zcamIp), // whether ZCam integration is active
   zcamIp: opts.zcamIp ?? savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
+  sensorMode: computeSensorMode(opts, savedConfig), // 'gpio' | 'esp32' | 'simulate'
 }
 
 function buildDefaultColors(n) {
@@ -102,6 +116,7 @@ function saveConfig() {
     laneColors: state.laneColors,
     videoReplayEnabled: state.videoReplayEnabled,
     zcamIp: state.zcamIp ?? null,
+    sensorMode: state.sensorMode,
   }
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
 }
@@ -174,36 +189,50 @@ initZCam(state.zcamIp)
 
 // ── Sensor Manager ────────────────────────────────────────────────────────────
 
-const sensorManager = createSensorManager({
-  opts,
-  state,
-  broadcast,
-  onFirstTrigger: () => {
-    if (zcam) zcam.startRecording()
-  },
-  onFinish: () => {
-    logResult()
-    if (zcam) {
-      setTimeout(
-        () =>
-          zcam
-            .stopAndFetchVideo(state.heat)
-            .then((url) => {
-              if (url) {
-                state.videoUrl = url
-                if (state.videoReplayEnabled) {
-                  broadcast('video', { videoUrl: url })
-                }
-              }
-            })
-            .catch((err) => {
-              console.error('ZCam: video fetch error:', err.message)
-            }),
-        500,
-      )
+let sensorManager = null
+
+function initSensorManager() {
+  if (sensorManager) {
+    try {
+      sensorManager.cleanup()
+    } catch (err) {
+      console.error('Sensor cleanup error:', err.message)
     }
-  },
-})
+  }
+  opts.simulate = state.sensorMode === 'simulate'
+  opts.sensor = state.sensorMode === 'simulate' ? 'gpio' : state.sensorMode
+  sensorManager = createSensorManager({
+    opts,
+    state,
+    broadcast,
+    onFirstTrigger: () => {
+      if (zcam) zcam.startRecording()
+    },
+    onFinish: () => {
+      logResult()
+      if (zcam) {
+        setTimeout(
+          () =>
+            zcam
+              .stopAndFetchVideo(state.heat)
+              .then((url) => {
+                if (url) {
+                  state.videoUrl = url
+                  if (state.videoReplayEnabled) {
+                    broadcast('video', { videoUrl: url })
+                  }
+                }
+              })
+              .catch((err) => {
+                console.error('ZCam: video fetch error:', err.message)
+              }),
+          500,
+        )
+      }
+    },
+  })
+  sensorManager.setup()
+}
 
 // ── Express + WS ──────────────────────────────────────────────────────────────
 
@@ -299,6 +328,25 @@ app.post('/api/zcam', (req, res) => {
   res.json({ ok: true, zcamEnabled: state.zcamEnabled, zcamIp: state.zcamIp })
 })
 
+app.post('/api/sensor', (req, res) => {
+  const { mode } = req.body
+  if (!['gpio', 'esp32', 'simulate'].includes(mode)) {
+    return res
+      .status(400)
+      .json({ error: 'mode must be gpio, esp32, or simulate' })
+  }
+  if (state.status === 'armed') {
+    return res
+      .status(400)
+      .json({ error: 'Cannot change sensor mode while armed' })
+  }
+  state.sensorMode = mode
+  saveConfig()
+  initSensorManager()
+  broadcast('settings')
+  res.json({ ok: true, sensorMode: state.sensorMode })
+})
+
 const server = http.createServer(app)
 wss = new WebSocket.Server({ server })
 
@@ -307,18 +355,19 @@ wss.on('connection', (ws) => {
 })
 
 initLog()
-sensorManager.setup()
+initSensorManager()
 
 server.listen(opts.port, () => {
-  const sensorMode = opts.simulate
-    ? 'SIMULATION'
-    : opts.sensor === 'gpio'
-      ? 'GPIO (pigpio)'
-      : 'ESP32 SENSOR'
+  const sensorModeLabel =
+    state.sensorMode === 'simulate'
+      ? 'SIMULATION'
+      : state.sensorMode === 'gpio'
+        ? 'GPIO (pigpio)'
+        : 'ESP32 SENSOR'
   console.log(`\n🏎  Pinewood Derby Server running`)
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
-  console.log(`   Mode          : ${sensorMode}`)
+  console.log(`   Mode          : ${sensorModeLabel}`)
   if (opts.zcamIp) {
     console.log(`   ZCam E2M4     : http://${opts.zcamIp}`)
   }
@@ -326,6 +375,6 @@ server.listen(opts.port, () => {
 })
 
 process.on('SIGINT', () => {
-  sensorManager.cleanup()
+  if (sensorManager) sensorManager.cleanup()
   process.exit(0)
 })
