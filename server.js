@@ -25,7 +25,7 @@ const http = require('http')
 const WebSocket = require('ws')
 const path = require('path')
 const fs = require('fs')
-const { createSensorManager } = require('./gpio')
+const { createSensorManager } = require('./sensor-manager')
 const { createZCamManager } = require('./zcam')
 
 // ── Config ────────────────────────────────────────────────────────────────────

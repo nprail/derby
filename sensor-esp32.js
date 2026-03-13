@@ -6,44 +6,23 @@
 // triggerLane() with those values; gapMs is computed from timestamp
 // differences so WiFi latency has no effect on recorded finish times.
 
-const { createBaseManager } = require('./sensor')
+const { BaseSensor } = require('./sensor')
 
 /**
- * Creates an ESP32-backed sensor manager.
- *
- * @param {object}   deps                - Dependencies (same shape as createBaseManager)
- * @param {object}   deps.opts           - Must include opts.lanes, opts.timeout, opts.simulate
- * @returns {{ setup, arm, reset, cleanup, triggerLane }}
+ * ESP32-backed sensor driver.  No hardware initialisation is required;
+ * triggers arrive via the POST /api/trigger HTTP endpoint.
  */
-function createEsp32SensorManager(deps) {
-  const { opts } = deps
+class Esp32Sensor extends BaseSensor {
+  /** Nothing to initialise — the ESP32 connects over WiFi. */
+  setup() {}
 
-  const base = createBaseManager(deps)
+  /** Nothing to tear down for ESP32 mode. */
+  cleanup() {}
 
-  function setup() {
-    // No hardware initialization needed — the ESP32 connects over WiFi.
+  /** Start the heat timeout; triggers will arrive over HTTP. */
+  _onArm() {
+    this._startHeatTimer()
   }
-
-  function arm() {
-    base.armBase()
-
-    if (opts.simulate) {
-      base.simulateRace()
-      return
-    }
-
-    base.startHeatTimer()
-  }
-
-  function reset() {
-    base.resetBase()
-  }
-
-  function cleanup() {
-    // No teardown needed for ESP32 mode.
-  }
-
-  return { setup, arm, reset, cleanup, triggerLane: base.triggerLane }
 }
 
-module.exports = { createEsp32SensorManager }
+module.exports = { Esp32Sensor }

@@ -4,36 +4,30 @@
 // Each falling edge on a lane pin is treated as a finish-line crossing; the
 // server measures elapsed time with process.hrtime.bigint().
 
-const { createBaseManager } = require('./sensor')
+const { BaseSensor } = require('./sensor')
 
 const DEFAULT_GPIO_PINS = { 1: 17, 2: 27, 3: 22, 4: 23 }
 const DEBOUNCE_MS = 50
 
 /**
- * Creates a GPIO-backed sensor manager.
- *
- * @param {object}   deps                - Dependencies (same shape as createBaseManager)
- * @param {object}   deps.opts           - Must include opts.lanes, opts.timeout, opts.simulate
- * @returns {{ setup, arm, reset, cleanup, triggerLane }}
+ * GPIO-backed sensor driver.  Extends BaseSensor with pigpio hardware lifecycle.
  */
-function createGpioSensorManager(deps) {
-  const { opts } = deps
-  let sensors = null
+class GpioSensor extends BaseSensor {
+  constructor(deps) {
+    super(deps)
+    this._sensors = null
+  }
 
-  const base = createBaseManager({
-    ...deps,
-    onHeatEnd: _removeListeners,
-  })
-
-  function setup() {
-    if (opts.simulate) return
+  /** Initialise pigpio and configure a Gpio input for each active lane. */
+  setup() {
+    if (this._opts.simulate) return
     try {
       const { Gpio, configureClock } = require('pigpio')
       configureClock(1, 0) // 1 µs sample rate
       const newSensors = {}
       const pins = Object.fromEntries(
         Object.entries(DEFAULT_GPIO_PINS).filter(
-          ([l]) => parseInt(l) <= opts.lanes,
+          ([l]) => parseInt(l) <= this._opts.lanes,
         ),
       )
       for (const [lane, pin] of Object.entries(pins)) {
@@ -46,49 +40,47 @@ function createGpioSensorManager(deps) {
         newSensors[lane] = s
         console.log(`  Lane ${lane} → GPIO ${pin}`)
       }
-      sensors = newSensors
+      this._sensors = newSensors
     } catch (err) {
       console.warn('GPIO unavailable:', err.message, '— use --simulate')
     }
   }
 
-  function arm() {
-    base.armBase()
+  /** Detach all GPIO alert listeners and release resources. */
+  cleanup() {
+    this._removeListeners()
+  }
 
-    if (opts.simulate) {
-      base.simulateRace()
-      return
-    }
+  /** Attach GPIO alert listeners and start the heat timer. */
+  _onArm() {
+    if (!this._sensors) return
 
-    if (!sensors) return
-
-    for (const [lane, sensor] of Object.entries(sensors)) {
-      if (parseInt(lane) > opts.lanes) continue
+    for (const [lane, sensor] of Object.entries(this._sensors)) {
+      if (parseInt(lane) > this._opts.lanes) continue
       sensor.on('alert', (level) => {
         if (level !== 0) return // level 0 = falling edge (finish crossing)
-        base.triggerLane(parseInt(lane))
+        this.triggerLane(parseInt(lane))
       })
     }
 
-    base.startHeatTimer()
+    this._startHeatTimer()
   }
 
-  function reset() {
-    _removeListeners()
-    base.resetBase()
+  /** Detach listeners before clearing heat state on reset. */
+  _onReset() {
+    this._removeListeners()
   }
 
-  function cleanup() {
-    _removeListeners()
+  /** Detach listeners when a heat finishes naturally. */
+  _onHeatEnd() {
+    this._removeListeners()
   }
 
-  function _removeListeners() {
-    if (sensors) {
-      for (const s of Object.values(sensors)) s.removeAllListeners('alert')
+  _removeListeners() {
+    if (this._sensors) {
+      for (const s of Object.values(this._sensors)) s.removeAllListeners('alert')
     }
   }
-
-  return { setup, arm, reset, cleanup, triggerLane: base.triggerLane }
 }
 
-module.exports = { createGpioSensorManager, DEFAULT_GPIO_PINS }
+module.exports = { GpioSensor, DEFAULT_GPIO_PINS }
