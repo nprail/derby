@@ -11,7 +11,7 @@ A real-time race timing and display system for Pinewood Derby events. An ESP32 s
 - **Microsecond-accurate timing** — ESP32 hardware interrupts (`esp_timer_get_time()`) record timestamps before any network call; WiFi latency has zero effect on results
 - **Simulation mode** — develop and demo without any hardware
 - **CSV logging** — every heat result is appended to `derby_results.csv`
-- **Configurable lane count** — supports 1–4 lanes out of the box (extend `LANE_PINS` in the ESP32 sketch for more)
+- **Configurable lane count** — configure the number of lanes from the Track Manager page; supports 2–6 lanes out of the box (extend `LANE_PINS` in the ESP32 sketch for more)
 - **ZCam E2M4 integration** — automatically starts recording on the first lane trigger, stops when the heat finishes, downloads the clip, and plays it back on the guest dashboard
 
 ---
@@ -48,30 +48,22 @@ npm install
 ## Usage
 
 ```bash
-# Standard run (GPIO mode, 4 lanes, port 3000)
+# Start the server (defaults to Simulate mode on first run)
 npm start
 
-# Simulation mode (no hardware required)
-npm run simulate
-
 # Custom options
-node server.js --lanes 3 --port 8080 --timeout 10
-node server.js --simulate --lanes 2
-
-# With ZCam E2M4 video recording (replace IP with your camera's address)
-node server.js --zcam 10.98.32.1
-node server.js --simulate --zcam 10.98.32.1
+node server.js --port 8080 --timeout 10
 ```
 
 ### CLI Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--lanes <n>` | `4` | Number of racing lanes |
 | `--port <n>` | `3000` | HTTP server port |
-| `--timeout <s>` | `8` | Seconds before a heat auto-finishes if not all lanes trigger |
-| `--simulate` | off | Use simulated race results instead of GPIO |
-| `--zcam <ip>` | off | Enable ZCam E2M4 recording; provide the camera's IP address |
+
+> **Heat timeout**, **lane count**, **sensor mode** (GPIO, ESP32, or Simulate), and **ZCam IP** are all configured from the Track Manager page at `/manage` and persisted to `derby_config.json`.
+
+> **Lane count**, **sensor mode** (GPIO, ESP32, or Simulate), and **ZCam IP** are all configured from the Track Manager page at `/manage` and persisted to `derby_config.json`. The server defaults to 4 lanes and Simulate mode when no config file exists.
 
 ---
 
@@ -111,10 +103,13 @@ Returns the current race state object.
   ],
   "laneColors": { "1": "Red", "2": "Blue", "3": "Yellow", "4": "Green" },
   "numLanes": 4,
+  "timeout": 8,
   "history": [ ... ],
   "videoUrl": "/videos/heat-3_2026-03-09_14-22-05.mov",
   "videoReplayEnabled": true,
-  "zcamEnabled": true
+  "zcamEnabled": true,
+  "zcamIp": "192.168.1.50",
+  "sensorMode": "esp32"
 }
 ```
 
@@ -133,7 +128,7 @@ Clears results and returns the state to `idle`. Does **not** advance the heat nu
 ```
 
 ### `POST /api/trigger`
-Called by the ESP32 sensor node when a car crosses the finish line. `timestamp_us` is the raw `esp_timer_get_time()` value from the ESP32, sent as a string to preserve 64-bit precision. The server computes `gapMs` from the difference between trigger timestamps, so WiFi latency has no effect on results. Returns `400` if the race is not armed or the lane is invalid.
+Called by the ESP32 sensor node when a car crosses the finish line. `timestamp_us` is the raw `esp_timer_get_time()` value from the ESP32, sent as a string to preserve 64-bit precision. The server computes `gapMs` from the difference between trigger timestamps, so WiFi latency has no effect on results. Returns `{ ok: true, ignored: true, reason: "Not armed" }` (HTTP 200) when the race is not armed. Returns `400` for an invalid lane number.
 
 ```json
 // Request body
@@ -157,27 +152,37 @@ Resets the entire race: clears results, sets heat back to 1, and clears history.
 { "ok": true }
 ```
 
-### `POST /api/colors`
-Updates one or more lane colors.
-
-```json
-// Request body
-{ "colors": { "1": "Purple", "3": "Orange" } }
-
-// Response
-{ "ok": true }
-```
-
 ### `POST /api/settings`
-Updates server settings. Persisted to `derby_config.json`.
+Updates one or more server settings. All changes are persisted to `derby_config.json`. Returns `400` if `numLanes` or `sensorMode` is changed while a heat is armed.
+
+All fields are optional — include only the ones you want to change:
 
 ```json
-// Request body
-{ "videoReplayEnabled": false }
+// Request body (any combination of fields)
+{
+  "numLanes": 3,
+  "timeout": 10,
+  "colors": { "1": "Purple", "3": "Orange" },
+  "videoReplayEnabled": false,
+  "zcamIp": "192.168.1.50",
+  "sensorMode": "esp32"
+}
+
+// To disable ZCam:
+{ "zcamIp": null }
 
 // Response
 { "ok": true }
 ```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `numLanes` | integer | 1–8; cannot change while armed |
+| `timeout` | number | > 0 (seconds) |
+| `colors` | object | keys are lane numbers as strings |
+| `videoReplayEnabled` | boolean | — |
+| `zcamIp` | string \| null | IP address of ZCam; `null` disables |
+| `sensorMode` | string | `"gpio"`, `"esp32"`, or `"simulate"`; cannot change while armed |
 
 ---
 
@@ -192,8 +197,7 @@ Connect to `ws://localhost:3000`. Every message is a JSON object that always inc
 | `trigger` | `lane`, `gapMs`, `place` | A car crossed the finish line |
 | `finished` | — | All cars finished (or timeout elapsed) |
 | `reset` | — | Heat state was cleared; `state.heat` is unchanged (increments on next `armed`) |
-| `colors` | — | Lane colors were updated |
-| `settings` | — | Settings (e.g. `videoReplayEnabled`) were updated |
+| `settings` | — | One or more settings were updated (lane count, colors, ZCam, sensor mode, etc.) |
 | `clear` | — | Display was cleared; `state.videoUrl` is now null |
 | `video` | `videoUrl` | ZCam clip has been downloaded; `state.videoUrl` is now set |
 
@@ -234,11 +238,7 @@ The camera must be reachable at the given IP address and in a record-ready state
 | `GET /DCIM/<folder>` | List clip files in a folder |
 | `GET /DCIM/<folder>/<file>` | Download a clip |
 
-**Default ZCam IP** when connected via USB (RNDIS) or the camera's built-in Wi-Fi AP: `10.98.32.1`
-
-```bash
-node server.js --zcam 10.98.32.1
-```
+**Default ZCam IP** when connected via USB (RNDIS) or the camera's built-in Wi-Fi AP: `10.98.32.1`. Configure the IP from the Track Manager at `/manage`.
 
 Downloaded clips are saved as `public/videos/heat-N_TIMESTAMP.mov` (or `.mp4`, e.g. `heat-3_2026-03-09_14-22-05.mov`) and served at `/videos/heat-N_TIMESTAMP.mov`. They are cleared from the guest display on each heat reset.
 
@@ -290,20 +290,23 @@ Eight colors are available. Configure them per-lane from the `/manage` page.
 
 ```
 derby/
-├── server.js          # HTTP server, WebSocket, API routes, race state, CSV logging
-├── gpio.js            # Race state management and simulation logic
-├── zcam.js            # ZCam E2M4 HTTP API client (record, stop, download clip)
+├── server.js           # HTTP server, WebSocket, API routes, race state, CSV logging
+├── sensor.js           # BaseSensor class — shared race logic and simulation
+├── sensor-esp32.js     # ESP32 sensor driver (triggers arrive via HTTP)
+├── sensor-gpio.js      # Raspberry Pi GPIO sensor driver (pigpio)
+├── sensor-manager.js   # Sensor factory — instantiates the right driver
+├── zcam.js             # ZCam E2M4 HTTP API client (record, stop, download clip)
 ├── esp32/
-│   ├── platformio.ini # PlatformIO build config
+│   ├── platformio.ini  # PlatformIO build config
 │   └── derby_sensor/
 │       └── derby_sensor.ino  # ESP32 sketch: ISR timing + WiFi reporting
 ├── public/
-│   ├── guest.html     # Guest-facing live results display (React) + heat video replay
-│   ├── manage.html    # Track manager UI (React)
-│   └── videos/        # Downloaded heat clips (auto-created when ZCam is enabled)
+│   ├── guest.html      # Guest-facing live results display + heat video replay
+│   ├── manage.html     # Track manager UI
+│   └── videos/         # Downloaded heat clips (auto-created when ZCam is enabled)
 ├── docs/
-│   ├── SETUP.md       # Server + ESP32 setup guide
-│   └── WIRING.md      # ESP32 pin mapping and sensor circuit
-├── derby_results.csv  # Auto-created on first run
+│   ├── SETUP.md        # Server + ESP32 setup guide
+│   └── WIRING.md       # ESP32 and GPIO pin mapping and sensor circuit
+├── derby_results.csv   # Auto-created on first run
 └── package.json
 ```

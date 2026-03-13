@@ -7,14 +7,15 @@
  *   GET /manage    → Track manager page (reset, configure lane colors)
  *
  * WebSocket broadcasts race state to all connected clients in real time.
- * Physical GPIO sensing is handled by the ESP32 sensor node (see esp32/).
+ * Sensor mode (gpio / esp32 / simulate), ZCam IP, and all other settings
+ * are configured via the Track Manager page and persisted in derby_config.json.
  *
  * Install:
- *   npm install express ws
+ *   npm install
  *
  * Usage:
  *   node server.js
- *   node server.js --lanes 3 --simulate --port 3000
+ *   node server.js --port 3000
  */
 
 const express = require('express')
@@ -22,7 +23,7 @@ const http = require('http')
 const WebSocket = require('ws')
 const path = require('path')
 const fs = require('fs')
-const { createSensorManager } = require('./gpio')
+const { createSensorManager } = require('./sensor-manager')
 const { createZCamManager } = require('./zcam')
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -36,20 +37,11 @@ const CONFIG_FILE = 'derby_config.json'
 function parseArgs() {
   const args = process.argv.slice(2)
   const opts = {
-    lanes: 4,
-    timeout: DEFAULT_TIMEOUT,
-    simulate: false,
     port: 3000,
-    zcamIp: null,
   }
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--lanes' && args[i + 1]) opts.lanes = parseInt(args[++i])
-    else if (args[i] === '--timeout' && args[i + 1])
-      opts.timeout = parseFloat(args[++i])
-    else if (args[i] === '--port' && args[i + 1])
+    if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
-    else if (args[i] === '--simulate') opts.simulate = true
-    else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
   }
   return opts
 }
@@ -64,13 +56,15 @@ let state = {
   heat: savedConfig.heat ?? 1,
   status: 'idle', // idle | armed | finished
   finishOrder: [], // [{ lane, gapMs }]
-  laneColors: savedConfig.laneColors ?? buildDefaultColors(opts.lanes),
-  numLanes: opts.lanes,
+  laneColors: savedConfig.laneColors ?? buildDefaultColors(savedConfig.numLanes ?? 4),
+  numLanes: savedConfig.numLanes ?? 4,
+  timeout: savedConfig.timeout ?? DEFAULT_TIMEOUT,
   history: [], // last 10 heats
   videoUrl: null, // URL of the latest heat recording, or null
   videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
-  zcamEnabled: !!(opts.zcamIp ?? savedConfig.zcamIp), // whether ZCam integration is active
-  zcamIp: opts.zcamIp ?? savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
+  zcamEnabled: !!(savedConfig.zcamIp), // whether ZCam integration is active
+  zcamIp: savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
+  sensorMode: savedConfig.sensorMode ?? 'simulate', // 'gpio' | 'esp32' | 'simulate'
 }
 
 function buildDefaultColors(n) {
@@ -95,8 +89,11 @@ function saveConfig() {
   const cfg = {
     heat: state.heat,
     laneColors: state.laneColors,
+    numLanes: state.numLanes,
+    timeout: state.timeout,
     videoReplayEnabled: state.videoReplayEnabled,
     zcamIp: state.zcamIp ?? null,
+    sensorMode: state.sensorMode,
   }
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
 }
@@ -169,36 +166,55 @@ initZCam(state.zcamIp)
 
 // ── Sensor Manager ────────────────────────────────────────────────────────────
 
-const sensorManager = createSensorManager({
-  opts,
-  state,
-  broadcast,
-  onFirstTrigger: () => {
-    if (zcam) zcam.startRecording()
-  },
-  onFinish: () => {
-    logResult()
-    if (zcam) {
-      setTimeout(
-        () =>
-          zcam
-            .stopAndFetchVideo(state.heat)
-            .then((url) => {
-              if (url) {
-                state.videoUrl = url
-                if (state.videoReplayEnabled) {
-                  broadcast('video', { videoUrl: url })
-                }
-              }
-            })
-            .catch((err) => {
-              console.error('ZCam: video fetch error:', err.message)
-            }),
-        500,
-      )
+let sensorManager = null
+
+function initSensorManager() {
+  if (sensorManager) {
+    try {
+      sensorManager.cleanup()
+    } catch (err) {
+      console.error('Sensor cleanup error:', err.message)
     }
-  },
-})
+  }
+  const sensorOpts = {
+    ...opts,
+    lanes: state.numLanes,
+    timeout: state.timeout,
+    simulate: state.sensorMode === 'simulate',
+    sensor: state.sensorMode === 'simulate' ? 'gpio' : state.sensorMode,
+  }
+  sensorManager = createSensorManager({
+    opts: sensorOpts,
+    state,
+    broadcast,
+    onFirstTrigger: () => {
+      if (zcam) zcam.startRecording()
+    },
+    onFinish: () => {
+      logResult()
+      if (zcam) {
+        setTimeout(
+          () =>
+            zcam
+              .stopAndFetchVideo(state.heat)
+              .then((url) => {
+                if (url) {
+                  state.videoUrl = url
+                  if (state.videoReplayEnabled) {
+                    broadcast('video', { videoUrl: url })
+                  }
+                }
+              })
+              .catch((err) => {
+                console.error('ZCam: video fetch error:', err.message)
+              }),
+          500,
+        )
+      }
+    },
+  })
+  sensorManager.setup()
+}
 
 // ── Express + WS ──────────────────────────────────────────────────────────────
 
@@ -261,61 +277,78 @@ app.post('/api/reset-race', (req, res) => {
   res.json({ ok: true })
 })
 
-app.post('/api/colors', (req, res) => {
-  const { colors } = req.body
-  if (!colors) return res.status(400).json({ error: 'Missing colors' })
-  state.laneColors = { ...state.laneColors, ...colors }
-  saveConfig()
-  broadcast('colors')
-  res.json({ ok: true })
-})
-
 app.post('/api/settings', (req, res) => {
-  const { videoReplayEnabled } = req.body
-  if (typeof videoReplayEnabled !== 'boolean') {
-    return res
-      .status(400)
-      .json({ error: 'Missing or invalid videoReplayEnabled' })
+  const { colors, videoReplayEnabled, numLanes, timeout, zcamIp, sensorMode } = req.body
+
+  if (state.status === 'armed' && (numLanes !== undefined || sensorMode !== undefined)) {
+    return res.status(400).json({ error: 'Cannot change lane count or sensor mode while armed' })
   }
-  state.videoReplayEnabled = videoReplayEnabled
+  if (colors !== undefined) {
+    if (typeof colors !== 'object' || colors === null)
+      return res.status(400).json({ error: 'colors must be an object' })
+    state.laneColors = { ...state.laneColors, ...colors }
+  }
+  if (videoReplayEnabled !== undefined) {
+    if (typeof videoReplayEnabled !== 'boolean')
+      return res.status(400).json({ error: 'videoReplayEnabled must be a boolean' })
+    state.videoReplayEnabled = videoReplayEnabled
+  }
+  if (numLanes !== undefined) {
+    if (!Number.isInteger(numLanes) || numLanes < 1 || numLanes > 8)
+      return res.status(400).json({ error: 'numLanes must be an integer between 1 and 8' })
+    state.numLanes = numLanes
+  }
+  if (timeout !== undefined) {
+    if (typeof timeout !== 'number' || timeout <= 0)
+      return res.status(400).json({ error: 'timeout must be a positive number' })
+    state.timeout = timeout
+  }
+  if (zcamIp !== undefined) {
+    if (zcamIp !== null && typeof zcamIp !== 'string')
+      return res.status(400).json({ error: 'zcamIp must be a string or null' })
+    initZCam(zcamIp || null)
+  }
+  if (sensorMode !== undefined) {
+    if (!['gpio', 'esp32', 'simulate'].includes(sensorMode))
+      return res.status(400).json({ error: 'sensorMode must be gpio, esp32, or simulate' })
+    state.sensorMode = sensorMode
+  }
+
   saveConfig()
+  if (sensorMode !== undefined) initSensorManager()
   broadcast('settings')
   res.json({ ok: true })
-})
-
-app.post('/api/zcam', (req, res) => {
-  const { ip } = req.body
-  if (ip !== null && ip !== undefined && typeof ip !== 'string') {
-    return res.status(400).json({ error: 'ip must be a string or null' })
-  }
-  initZCam(ip || null)
-  saveConfig()
-  broadcast('settings')
-  res.json({ ok: true, zcamEnabled: state.zcamEnabled, zcamIp: state.zcamIp })
 })
 
 const server = http.createServer(app)
 wss = new WebSocket.Server({ server })
 
 wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'init', state }))
+  const { _startTime, ...publicState } = state
+  ws.send(JSON.stringify({ type: 'init', state: publicState }))
 })
 
 initLog()
+initSensorManager()
 
 server.listen(opts.port, () => {
+  const sensorModeLabel =
+    state.sensorMode === 'simulate'
+      ? 'SIMULATION'
+      : state.sensorMode === 'gpio'
+        ? 'GPIO (pigpio)'
+        : 'ESP32 SENSOR'
   console.log(`\n🏎  Pinewood Derby Server running`)
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
-  console.log(
-    `   Mode          : ${opts.simulate ? 'SIMULATION' : 'ESP32 SENSOR'}`,
-  )
-  if (opts.zcamIp) {
-    console.log(`   ZCam E2M4     : http://${opts.zcamIp}`)
+  console.log(`   Mode          : ${sensorModeLabel}`)
+  if (state.zcamIp) {
+    console.log(`   ZCam E2M4     : http://${state.zcamIp}`)
   }
   console.log()
 })
 
 process.on('SIGINT', () => {
+  if (sensorManager) sensorManager.cleanup()
   process.exit(0)
 })
