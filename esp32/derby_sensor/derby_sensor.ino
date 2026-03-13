@@ -35,7 +35,7 @@
 #define SERVER_HOST    "192.168.1.100"  // IP or hostname of the Node server
 #define SERVER_PORT    3000
 
-// Number of lanes (must match --lanes passed to server.js)
+// Number of lanes (configure via Track Manager at /manage)
 #define NUM_LANES      4
 
 // GPIO pin for each lane (0-indexed array → lanes 1-4).

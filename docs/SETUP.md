@@ -40,15 +40,17 @@ npm install
 
 ### 3. Test with Simulation Mode
 
-Before connecting any hardware, verify everything works:
+Before connecting any hardware, verify everything works. On first run the server defaults to Simulate mode (no hardware required):
 
 ```bash
-npm run simulate
+npm start
 ```
 
-Open `http://localhost:3000/` — you should see the guest display and live simulated heat results.
+Open `http://localhost:3000/` — you should see the guest display and live simulated heat results. The sensor mode can be changed at any time from the Track Manager at `http://localhost:3000/manage`.
 
 ### 4. Run in Live Mode
+
+Start the server, then open the Track Manager (`http://localhost:3000/manage`) and select the appropriate sensor mode (**GPIO** for Raspberry Pi pins or **ESP32** for the wireless sensor node).
 
 ```bash
 npm start
@@ -58,11 +60,10 @@ npm start
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--lanes N` | `4` | Number of race lanes |
 | `--timeout N` | `8` | Seconds to wait before auto-finishing a heat |
 | `--port N` | `3000` | HTTP/WebSocket port |
-| `--simulate` | off | Run with simulated sensor events (no hardware needed) |
-| `--zcam <ip>` | off | Enable ZCam E2M4 video integration at the given IP |
+
+> **Lane count**, **sensor mode** (GPIO, ESP32, or Simulate), and **ZCam IP** are all configured from the Track Manager page at `/manage` and persisted to `derby_config.json`. The server defaults to 4 lanes and Simulate mode when no config file exists.
 
 The server starts two pages and a WebSocket endpoint:
 
@@ -161,46 +162,10 @@ The server can automatically record each heat and replay the clip on the guest d
 
 1. Connect the ZCam to the same WiFi network as the server.
 2. Note the camera's IP address (visible on the camera's LCD or from your router).
-3. Start the server with the `--zcam` flag:
+3. Start the server with `npm start`, then open the Track Manager at `http://localhost:3000/manage`.
+4. Enter the camera's IP address in the ZCam settings section and save.
 
-```bash
-node server.js --zcam 192.168.1.50
-```
-
-Replace `192.168.1.50` with the actual IP of your ZCam.
-
-### How it works
-
-- When the **first lane triggers**, the server calls the ZCam HTTP API to start recording.
-- When the **heat finishes**, the server stops recording and downloads the new clip from the camera's SD card.
-- The clip is saved to `public/videos/` and served at `/videos/<filename>`.
-- The guest display automatically plays back the clip after each heat (if video replay is enabled).
-
-Video replay can be toggled from the **Track Manager** page at `/manage`. The setting is saved to `derby_config.json` and persists across restarts.
-
-### Troubleshooting
-
-- Confirm the camera is reachable: `curl http://<camera-ip>/ctrl/session`
-- Check the server console — ZCam errors are logged with the `ZCam:` prefix.
-- Clip download may take up to 30 seconds; the server polls the camera until the new file appears.
-
----
-
-## Part 3 — ZCam E2M4 Integration (Optional)
-
-The server can automatically record each heat and replay the clip on the guest display. A ZCam E2M4 must be on the same network as the server.
-
-### Setup
-
-1. Connect the ZCam to the same WiFi network as the server.
-2. Note the camera's IP address (visible on the camera's LCD or from the router).
-3. Start the server with the `--zcam` flag:
-
-```bash
-npm start -- --zcam 192.168.1.50
-```
-
-Replace `192.168.1.50` with the actual IP of your ZCam.
+The ZCam IP is persisted to `derby_config.json` and reconnects automatically on each server restart.
 
 ### How it works
 
@@ -209,7 +174,7 @@ Replace `192.168.1.50` with the actual IP of your ZCam.
 - The clip is saved to `public/videos/` and served at `/videos/<filename>`.
 - The guest display automatically plays back the clip after each heat.
 
-Video replay can be toggled per-session from the **Track Manager** page. The setting is persisted in `derby_config.json`.
+Video replay can be toggled from the **Track Manager** page. The setting is persisted in `derby_config.json`.
 
 ### Troubleshooting
 

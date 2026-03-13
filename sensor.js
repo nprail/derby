@@ -140,7 +140,7 @@ class BaseSensor {
   _startHeatTimer() {
     this._heatTimer = setTimeout(() => {
       if (this._state.status === 'armed') this._finishHeat()
-    }, this._opts.timeout * 1000)
+    }, (this._state.timeout ?? this._opts.timeout) * 1000)
   }
 
   _clearHeatTimer() {
@@ -150,7 +150,7 @@ class BaseSensor {
   async _simulateRace() {
     await _sleep(1500)
     const lanes = _shuffle(
-      Array.from({ length: this._opts.lanes }, (_, i) => i + 1),
+      Array.from({ length: this._state.numLanes ?? this._opts.lanes }, (_, i) => i + 1),
     )
     this._state._startTime = process.hrtime.bigint()
     for (let i = 0; i < lanes.length; i++) {

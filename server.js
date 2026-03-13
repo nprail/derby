@@ -15,7 +15,7 @@
  *
  * Usage:
  *   node server.js
- *   node server.js --lanes 3 --port 3000
+ *   node server.js --port 3000
  */
 
 const express = require('express')
@@ -37,15 +37,10 @@ const CONFIG_FILE = 'derby_config.json'
 function parseArgs() {
   const args = process.argv.slice(2)
   const opts = {
-    lanes: 4,
-    timeout: DEFAULT_TIMEOUT,
     port: 3000,
   }
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--lanes' && args[i + 1]) opts.lanes = parseInt(args[++i])
-    else if (args[i] === '--timeout' && args[i + 1])
-      opts.timeout = parseFloat(args[++i])
-    else if (args[i] === '--port' && args[i + 1])
+    if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
   }
   return opts
@@ -61,8 +56,9 @@ let state = {
   heat: savedConfig.heat ?? 1,
   status: 'idle', // idle | armed | finished
   finishOrder: [], // [{ lane, gapMs }]
-  laneColors: savedConfig.laneColors ?? buildDefaultColors(opts.lanes),
-  numLanes: opts.lanes,
+  laneColors: savedConfig.laneColors ?? buildDefaultColors(savedConfig.numLanes ?? 4),
+  numLanes: savedConfig.numLanes ?? 4,
+  timeout: savedConfig.timeout ?? DEFAULT_TIMEOUT,
   history: [], // last 10 heats
   videoUrl: null, // URL of the latest heat recording, or null
   videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
@@ -93,6 +89,8 @@ function saveConfig() {
   const cfg = {
     heat: state.heat,
     laneColors: state.laneColors,
+    numLanes: state.numLanes,
+    timeout: state.timeout,
     videoReplayEnabled: state.videoReplayEnabled,
     zcamIp: state.zcamIp ?? null,
     sensorMode: state.sensorMode,
@@ -180,6 +178,8 @@ function initSensorManager() {
   }
   const sensorOpts = {
     ...opts,
+    lanes: state.numLanes,
+    timeout: state.timeout,
     simulate: state.sensorMode === 'simulate',
     sensor: state.sensorMode === 'simulate' ? 'gpio' : state.sensorMode,
   }
@@ -277,56 +277,47 @@ app.post('/api/reset-race', (req, res) => {
   res.json({ ok: true })
 })
 
-app.post('/api/colors', (req, res) => {
-  const { colors } = req.body
-  if (!colors) return res.status(400).json({ error: 'Missing colors' })
-  state.laneColors = { ...state.laneColors, ...colors }
-  saveConfig()
-  broadcast('colors')
-  res.json({ ok: true })
-})
-
 app.post('/api/settings', (req, res) => {
-  const { videoReplayEnabled } = req.body
-  if (typeof videoReplayEnabled !== 'boolean') {
-    return res
-      .status(400)
-      .json({ error: 'Missing or invalid videoReplayEnabled' })
+  const { colors, videoReplayEnabled, numLanes, timeout, zcamIp, sensorMode } = req.body
+
+  if (state.status === 'armed' && (numLanes !== undefined || sensorMode !== undefined)) {
+    return res.status(400).json({ error: 'Cannot change lane count or sensor mode while armed' })
   }
-  state.videoReplayEnabled = videoReplayEnabled
+  if (colors !== undefined) {
+    if (typeof colors !== 'object' || colors === null)
+      return res.status(400).json({ error: 'colors must be an object' })
+    state.laneColors = { ...state.laneColors, ...colors }
+  }
+  if (videoReplayEnabled !== undefined) {
+    if (typeof videoReplayEnabled !== 'boolean')
+      return res.status(400).json({ error: 'videoReplayEnabled must be a boolean' })
+    state.videoReplayEnabled = videoReplayEnabled
+  }
+  if (numLanes !== undefined) {
+    if (!Number.isInteger(numLanes) || numLanes < 1 || numLanes > 8)
+      return res.status(400).json({ error: 'numLanes must be an integer between 1 and 8' })
+    state.numLanes = numLanes
+  }
+  if (timeout !== undefined) {
+    if (typeof timeout !== 'number' || timeout <= 0)
+      return res.status(400).json({ error: 'timeout must be a positive number' })
+    state.timeout = timeout
+  }
+  if (zcamIp !== undefined) {
+    if (zcamIp !== null && typeof zcamIp !== 'string')
+      return res.status(400).json({ error: 'zcamIp must be a string or null' })
+    initZCam(zcamIp || null)
+  }
+  if (sensorMode !== undefined) {
+    if (!['gpio', 'esp32', 'simulate'].includes(sensorMode))
+      return res.status(400).json({ error: 'sensorMode must be gpio, esp32, or simulate' })
+    state.sensorMode = sensorMode
+  }
+
   saveConfig()
+  if (sensorMode !== undefined) initSensorManager()
   broadcast('settings')
   res.json({ ok: true })
-})
-
-app.post('/api/zcam', (req, res) => {
-  const { ip } = req.body
-  if (ip !== null && ip !== undefined && typeof ip !== 'string') {
-    return res.status(400).json({ error: 'ip must be a string or null' })
-  }
-  initZCam(ip || null)
-  saveConfig()
-  broadcast('settings')
-  res.json({ ok: true, zcamEnabled: state.zcamEnabled, zcamIp: state.zcamIp })
-})
-
-app.post('/api/sensor', (req, res) => {
-  const { mode } = req.body
-  if (!['gpio', 'esp32', 'simulate'].includes(mode)) {
-    return res
-      .status(400)
-      .json({ error: 'mode must be gpio, esp32, or simulate' })
-  }
-  if (state.status === 'armed') {
-    return res
-      .status(400)
-      .json({ error: 'Cannot change sensor mode while armed' })
-  }
-  state.sensorMode = mode
-  saveConfig()
-  initSensorManager()
-  broadcast('settings')
-  res.json({ ok: true, sensorMode: state.sensorMode })
 })
 
 const server = http.createServer(app)

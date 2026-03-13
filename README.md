@@ -11,7 +11,7 @@ A real-time race timing and display system for Pinewood Derby events. An ESP32 s
 - **Microsecond-accurate timing** — ESP32 hardware interrupts (`esp_timer_get_time()`) record timestamps before any network call; WiFi latency has zero effect on results
 - **Simulation mode** — develop and demo without any hardware
 - **CSV logging** — every heat result is appended to `derby_results.csv`
-- **Configurable lane count** — supports 1–4 lanes out of the box (extend `LANE_PINS` in the ESP32 sketch for more)
+- **Configurable lane count** — configure the number of lanes from the Track Manager page; supports 2–6 lanes out of the box (extend `LANE_PINS` in the ESP32 sketch for more)
 - **ZCam E2M4 integration** — automatically starts recording on the first lane trigger, stops when the heat finishes, downloads the clip, and plays it back on the guest dashboard
 
 ---
@@ -48,30 +48,21 @@ npm install
 ## Usage
 
 ```bash
-# Standard run (GPIO mode, 4 lanes, port 3000)
+# Start the server (defaults to Simulate mode on first run)
 npm start
 
-# Simulation mode (no hardware required)
-npm run simulate
-
 # Custom options
-node server.js --lanes 3 --port 8080 --timeout 10
-node server.js --simulate --lanes 2
-
-# With ZCam E2M4 video recording (replace IP with your camera's address)
-node server.js --zcam 10.98.32.1
-node server.js --simulate --zcam 10.98.32.1
+node server.js --port 8080 --timeout 10
 ```
 
 ### CLI Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--lanes <n>` | `4` | Number of racing lanes |
 | `--port <n>` | `3000` | HTTP server port |
 | `--timeout <s>` | `8` | Seconds before a heat auto-finishes if not all lanes trigger |
-| `--simulate` | off | Use simulated race results instead of GPIO |
-| `--zcam <ip>` | off | Enable ZCam E2M4 recording; provide the camera's IP address |
+
+> **Lane count**, **sensor mode** (GPIO, ESP32, or Simulate), and **ZCam IP** are all configured from the Track Manager page at `/manage` and persisted to `derby_config.json`. The server defaults to 4 lanes and Simulate mode when no config file exists.
 
 ---
 
@@ -114,7 +105,9 @@ Returns the current race state object.
   "history": [ ... ],
   "videoUrl": "/videos/heat-3_2026-03-09_14-22-05.mov",
   "videoReplayEnabled": true,
-  "zcamEnabled": true
+  "zcamEnabled": true,
+  "zcamIp": "192.168.1.50",
+  "sensorMode": "esp32"
 }
 ```
 
@@ -133,7 +126,7 @@ Clears results and returns the state to `idle`. Does **not** advance the heat nu
 ```
 
 ### `POST /api/trigger`
-Called by the ESP32 sensor node when a car crosses the finish line. `timestamp_us` is the raw `esp_timer_get_time()` value from the ESP32, sent as a string to preserve 64-bit precision. The server computes `gapMs` from the difference between trigger timestamps, so WiFi latency has no effect on results. Returns `400` if the race is not armed or the lane is invalid.
+Called by the ESP32 sensor node when a car crosses the finish line. `timestamp_us` is the raw `esp_timer_get_time()` value from the ESP32, sent as a string to preserve 64-bit precision. The server computes `gapMs` from the difference between trigger timestamps, so WiFi latency has no effect on results. Returns `{ ok: true, ignored: true, reason: "Not armed" }` (HTTP 200) when the race is not armed. Returns `400` for an invalid lane number.
 
 ```json
 // Request body
@@ -157,6 +150,17 @@ Resets the entire race: clears results, sets heat back to 1, and clears history.
 { "ok": true }
 ```
 
+### `POST /api/lanes`
+Sets the number of racing lanes. Persisted to `derby_config.json`. Returns `400` if a heat is currently armed.
+
+```json
+// Request body — numLanes must be an integer between 1 and 8
+{ "numLanes": 3 }
+
+// Response
+{ "ok": true, "numLanes": 3 }
+```
+
 ### `POST /api/colors`
 Updates one or more lane colors.
 
@@ -177,6 +181,31 @@ Updates server settings. Persisted to `derby_config.json`.
 
 // Response
 { "ok": true }
+```
+
+### `POST /api/zcam`
+Configures the ZCam E2M4 IP address. The camera is connected immediately and the setting is persisted to `derby_config.json`. Pass `null` to disable ZCam integration.
+
+```json
+// Request body
+{ "ip": "192.168.1.50" }
+
+// To disable:
+{ "ip": null }
+
+// Response
+{ "ok": true, "zcamEnabled": true, "zcamIp": "192.168.1.50" }
+```
+
+### `POST /api/sensor`
+Sets the sensor mode. Persisted to `derby_config.json`. Returns `400` if a heat is currently armed.
+
+```json
+// Request body — mode must be "gpio", "esp32", or "simulate"
+{ "mode": "esp32" }
+
+// Response
+{ "ok": true, "sensorMode": "esp32" }
 ```
 
 ---
