@@ -7,17 +7,15 @@
  *   GET /manage    → Track manager page (reset, configure lane colors)
  *
  * WebSocket broadcasts race state to all connected clients in real time.
- * Physical sensing is handled either by Raspberry Pi GPIO (pigpio, --sensor gpio)
- * or by an ESP32 sensor node that timestamps triggers in hardware and reports
- * them over HTTP (--sensor esp32, see esp32/).
+ * Sensor mode (gpio / esp32 / simulate), ZCam IP, and all other settings
+ * are configured via the Track Manager page and persisted in derby_config.json.
  *
  * Install:
  *   npm install
  *
  * Usage:
- *   node server.js --sensor gpio
- *   node server.js --sensor esp32
- *   node server.js --lanes 3 --simulate --port 3000
+ *   node server.js
+ *   node server.js --lanes 3 --port 3000
  */
 
 const express = require('express')
@@ -41,12 +39,7 @@ function parseArgs() {
   const opts = {
     lanes: 4,
     timeout: DEFAULT_TIMEOUT,
-    simulate: false,
     port: 3000,
-    sensor: 'gpio', // 'gpio' | 'esp32'
-    zcamIp: null,
-    _sensorExplicit: false,
-    _simulateExplicit: false,
   }
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--lanes' && args[i + 1]) opts.lanes = parseInt(args[++i])
@@ -54,22 +47,8 @@ function parseArgs() {
       opts.timeout = parseFloat(args[++i])
     else if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
-    else if (args[i] === '--simulate') {
-      opts.simulate = true
-      opts._simulateExplicit = true
-    } else if (args[i] === '--sensor' && args[i + 1]) {
-      opts.sensor = args[++i]
-      opts._sensorExplicit = true
-    } else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
   }
   return opts
-}
-
-// Resolve sensor mode: explicit CLI flags beat saved config, which beats defaults.
-function computeSensorMode(opts, savedConfig) {
-  if (opts._simulateExplicit) return 'simulate'
-  if (opts._sensorExplicit) return opts.sensor
-  return savedConfig.sensorMode ?? (opts.simulate ? 'simulate' : opts.sensor)
 }
 
 // ── Race State ────────────────────────────────────────────────────────────────
@@ -87,9 +66,9 @@ let state = {
   history: [], // last 10 heats
   videoUrl: null, // URL of the latest heat recording, or null
   videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
-  zcamEnabled: !!(opts.zcamIp ?? savedConfig.zcamIp), // whether ZCam integration is active
-  zcamIp: opts.zcamIp ?? savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
-  sensorMode: computeSensorMode(opts, savedConfig), // 'gpio' | 'esp32' | 'simulate'
+  zcamEnabled: !!(savedConfig.zcamIp), // whether ZCam integration is active
+  zcamIp: savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
+  sensorMode: savedConfig.sensorMode ?? 'simulate', // 'gpio' | 'esp32' | 'simulate'
 }
 
 function buildDefaultColors(n) {
@@ -199,10 +178,13 @@ function initSensorManager() {
       console.error('Sensor cleanup error:', err.message)
     }
   }
-  opts.simulate = state.sensorMode === 'simulate'
-  opts.sensor = state.sensorMode === 'simulate' ? 'gpio' : state.sensorMode
+  const sensorOpts = {
+    ...opts,
+    simulate: state.sensorMode === 'simulate',
+    sensor: state.sensorMode === 'simulate' ? 'gpio' : state.sensorMode,
+  }
   sensorManager = createSensorManager({
-    opts,
+    opts: sensorOpts,
     state,
     broadcast,
     onFirstTrigger: () => {
@@ -351,7 +333,8 @@ const server = http.createServer(app)
 wss = new WebSocket.Server({ server })
 
 wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'init', state }))
+  const { _startTime, ...publicState } = state
+  ws.send(JSON.stringify({ type: 'init', state: publicState }))
 })
 
 initLog()
@@ -368,8 +351,8 @@ server.listen(opts.port, () => {
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
   console.log(`   Mode          : ${sensorModeLabel}`)
-  if (opts.zcamIp) {
-    console.log(`   ZCam E2M4     : http://${opts.zcamIp}`)
+  if (state.zcamIp) {
+    console.log(`   ZCam E2M4     : http://${state.zcamIp}`)
   }
   console.log()
 })

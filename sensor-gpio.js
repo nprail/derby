@@ -42,7 +42,7 @@ class GpioSensor extends BaseSensor {
       }
       this._sensors = newSensors
     } catch (err) {
-      console.warn('GPIO unavailable:', err.message, '— use --simulate')
+      console.warn('GPIO unavailable:', err.message, '— use Simulate mode')
     }
   }
 

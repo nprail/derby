@@ -4,9 +4,7 @@
   "description": "Pinewood Derby race sensor server with live display",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js --sensor gpio",
-    "start:esp32": "node server.js --sensor esp32",
-    "simulate": "node server.js --simulate"
+    "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.13.6",
