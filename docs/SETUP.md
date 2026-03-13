@@ -60,10 +60,9 @@ npm start
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--timeout N` | `8` | Seconds to wait before auto-finishing a heat |
 | `--port N` | `3000` | HTTP/WebSocket port |
 
-> **Lane count**, **sensor mode** (GPIO, ESP32, or Simulate), and **ZCam IP** are all configured from the Track Manager page at `/manage` and persisted to `derby_config.json`. The server defaults to 4 lanes and Simulate mode when no config file exists.
+> **Heat timeout**, **lane count**, **sensor mode** (GPIO, ESP32, or Simulate), and **ZCam IP** are all configured from the Track Manager page at `/manage` and persisted to `derby_config.json`. The server defaults to 4 lanes, 8-second timeout, and Simulate mode when no config file exists.
 
 The server starts two pages and a WebSocket endpoint:
 
