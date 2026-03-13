@@ -7,13 +7,16 @@
  *   GET /manage    → Track manager page (reset, configure lane colors)
  *
  * WebSocket broadcasts race state to all connected clients in real time.
- * Physical GPIO sensing is handled by the ESP32 sensor node (see esp32/).
+ * Physical sensing is handled either by Raspberry Pi GPIO (pigpio, --sensor gpio)
+ * or by an ESP32 sensor node that timestamps triggers in hardware and reports
+ * them over HTTP (--sensor esp32, see esp32/).
  *
  * Install:
- *   npm install express ws
+ *   npm install
  *
  * Usage:
- *   node server.js
+ *   node server.js --sensor gpio
+ *   node server.js --sensor esp32
  *   node server.js --lanes 3 --simulate --port 3000
  */
 
@@ -40,6 +43,7 @@ function parseArgs() {
     timeout: DEFAULT_TIMEOUT,
     simulate: false,
     port: 3000,
+    sensor: 'gpio', // 'gpio' | 'esp32'
     zcamIp: null,
   }
   for (let i = 0; i < args.length; i++) {
@@ -49,6 +53,7 @@ function parseArgs() {
     else if (args[i] === '--port' && args[i + 1])
       opts.port = parseInt(args[++i])
     else if (args[i] === '--simulate') opts.simulate = true
+    else if (args[i] === '--sensor' && args[i + 1]) opts.sensor = args[++i]
     else if (args[i] === '--zcam' && args[i + 1]) opts.zcamIp = args[++i]
   }
   return opts
@@ -302,14 +307,18 @@ wss.on('connection', (ws) => {
 })
 
 initLog()
+sensorManager.setup()
 
 server.listen(opts.port, () => {
+  const sensorMode = opts.simulate
+    ? 'SIMULATION'
+    : opts.sensor === 'gpio'
+      ? 'GPIO (pigpio)'
+      : 'ESP32 SENSOR'
   console.log(`\n🏎  Pinewood Derby Server running`)
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
-  console.log(
-    `   Mode          : ${opts.simulate ? 'SIMULATION' : 'ESP32 SENSOR'}`,
-  )
+  console.log(`   Mode          : ${sensorMode}`)
   if (opts.zcamIp) {
     console.log(`   ZCam E2M4     : http://${opts.zcamIp}`)
   }
@@ -317,5 +326,6 @@ server.listen(opts.port, () => {
 })
 
 process.on('SIGINT', () => {
+  sensorManager.cleanup()
   process.exit(0)
 })
