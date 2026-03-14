@@ -4,12 +4,22 @@
   "description": "Pinewood Derby race sensor server with live display",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "vite build",
+    "dev": "vite"
   },
   "dependencies": {
     "axios": "^1.13.6",
     "express": "^4.18.2",
     "pigpio": "^3.3.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tailwindcss": "^4.2.1",
+    "vite": "^7.3.1"
   }
 }
