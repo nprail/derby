@@ -231,6 +231,7 @@ app.get('/judge', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'judge.html')),
 )
 app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
+app.use(express.static(path.join(__dirname, 'public')))
 
 app.get('/api/state', (req, res) => res.json(state))
 
