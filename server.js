@@ -227,6 +227,9 @@ app.get('/', (req, res) =>
 app.get('/manage', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'manage.html')),
 )
+app.get('/judge', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'judge.html')),
+)
 app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
 
 app.get('/api/state', (req, res) => res.json(state))
@@ -264,6 +267,35 @@ app.post('/api/trigger', (req, res) => {
 app.post('/api/clear-display', (req, res) => {
   state.videoUrl = null
   broadcast('clear')
+  res.json({ ok: true })
+})
+
+// Called by the judge page to manually set heat results without sensors.
+// { finishOrder: [{ lane: number, gapMs?: number }, …] }
+app.post('/api/judge-result', (req, res) => {
+  const { finishOrder } = req.body
+
+  if (!Array.isArray(finishOrder) || finishOrder.length === 0)
+    return res.status(400).json({ error: 'finishOrder must be a non-empty array' })
+
+  const lanes = []
+  for (const e of finishOrder) {
+    const lane = parseInt(e.lane)
+    if (!Number.isInteger(lane) || lane < 1 || lane > state.numLanes)
+      return res.status(400).json({ error: `Invalid lane: ${e.lane}` })
+    if (lanes.some((l) => l.lane === lane))
+      return res.status(400).json({ error: `Duplicate lane: ${lane}` })
+    lanes.push({ lane, gapMs: typeof e.gapMs === 'number' ? e.gapMs : 0 })
+  }
+
+  state.finishOrder = lanes
+  state.status = 'finished'
+  state.history.unshift({ heat: state.heat, finishOrder: [...lanes] })
+  if (state.history.length > 10) state.history.pop()
+
+  logResult()
+  broadcast('finished')
+
   res.json({ ok: true })
 })
 
@@ -341,6 +373,7 @@ server.listen(opts.port, () => {
   console.log(`\n🏎  Pinewood Derby Server running`)
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
+  console.log(`   Judge page    : http://localhost:${opts.port}/judge`)
   console.log(`   Mode          : ${sensorModeLabel}`)
   if (state.zcamIp) {
     console.log(`   ZCam E2M4     : http://${state.zcamIp}`)

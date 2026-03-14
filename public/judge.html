@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🏁 Derby Judge</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: #0a0a0f;
+        color: #f0f0f0;
+        font-family: 'Barlow', sans-serif;
+        min-height: 100vh;
+      }
+      .font-display {
+        font-family: 'Teko', sans-serif;
+      }
+      .font-condensed {
+        font-family: 'Barlow Condensed', sans-serif;
+      }
+
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1.6);
+          opacity: 0;
+        }
+      }
+      @keyframes rec-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.2; }
+      }
+      .rec-dot {
+        animation: rec-pulse 0.8s ease-in-out infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const LANE_PALETTES = {
+        Red: {
+          bg: '#1a0808',
+          border: '#dc2626',
+          text: '#fca5a5',
+          glow: 'rgba(220,38,38,0.4)',
+          dot: '#ef4444',
+        },
+        Blue: {
+          bg: '#08101a',
+          border: '#2563eb',
+          text: '#93c5fd',
+          glow: 'rgba(37,99,235,0.4)',
+          dot: '#3b82f6',
+        },
+        Yellow: {
+          bg: '#1a1608',
+          border: '#ca8a04',
+          text: '#fde68a',
+          glow: 'rgba(202,138,4,0.4)',
+          dot: '#eab308',
+        },
+        Green: {
+          bg: '#081a0c',
+          border: '#16a34a',
+          text: '#86efac',
+          glow: 'rgba(22,163,74,0.4)',
+          dot: '#22c55e',
+        },
+        Purple: {
+          bg: '#110818',
+          border: '#9333ea',
+          text: '#d8b4fe',
+          glow: 'rgba(147,51,234,0.4)',
+          dot: '#a855f7',
+        },
+        Orange: {
+          bg: '#1a0e08',
+          border: '#ea580c',
+          text: '#fed7aa',
+          glow: 'rgba(234,88,12,0.4)',
+          dot: '#f97316',
+        },
+        Pink: {
+          bg: '#1a0812',
+          border: '#db2777',
+          text: '#fbcfe8',
+          glow: 'rgba(219,39,119,0.4)',
+          dot: '#ec4899',
+        },
+        White: {
+          bg: '#141418',
+          border: '#d1d5db',
+          text: '#f9fafb',
+          glow: 'rgba(209,213,219,0.4)',
+          dot: '#e5e7eb',
+        },
+      }
+    </script>
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React
+
+      const PLACE_LABELS = ['1ST', '2ND', '3RD', '4TH', '5TH', '6TH', '7TH', '8TH']
+      const RECORD_MS = 1000
+      // Step size in seconds for frame-by-frame (approx 1 frame at 30 fps)
+      const FRAME_STEP = 1 / 30
+
+      async function api(path, body) {
+        const res = await fetch(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        return res.json()
+      }
+
+      function getSupportedMimeType() {
+        const candidates = ['video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+        for (const t of candidates) {
+          if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t
+        }
+        return ''
+      }
+
+      function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMoveUp, onMoveDown }) {
+        const colorName = laneColors[lane] || 'White'
+        const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+
+        return (
+          <div
+            className="flex items-center gap-3 rounded-xl border-2 px-4 py-3"
+            style={{
+              background: palette.bg,
+              borderColor: palette.border + '80',
+              boxShadow: `0 0 12px ${palette.glow}30`,
+            }}
+          >
+            {/* Place label */}
+            <div
+              className="font-display text-3xl w-12 text-center flex-shrink-0 leading-none"
+              style={{ color: palette.text }}
+            >
+              {PLACE_LABELS[place]}
+            </div>
+
+            {/* Divider */}
+            <div className="w-px self-stretch opacity-20" style={{ background: palette.border }} />
+
+            {/* Lane info */}
+            <div className="flex-1 min-w-0">
+              <div
+                className="font-condensed text-xs opacity-40 uppercase tracking-widest"
+                style={{ color: palette.text }}
+              >
+                Lane {lane}
+              </div>
+              <div
+                className="font-display text-2xl leading-tight"
+                style={{ color: palette.text }}
+              >
+                {colorName}
+              </div>
+            </div>
+
+            {place === 0 && <div className="text-xl flex-shrink-0">🏆</div>}
+
+            {/* Reorder buttons */}
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <button
+                onClick={onMoveUp}
+                disabled={!canMoveUp}
+                className="w-8 h-7 flex items-center justify-center rounded-md font-condensed text-xs transition disabled:opacity-20 hover:enabled:bg-white/10"
+                style={{ color: palette.text }}
+                title="Move up"
+              >
+                ▲
+              </button>
+              <button
+                onClick={onMoveDown}
+                disabled={!canMoveDown}
+                className="w-8 h-7 flex items-center justify-center rounded-md font-condensed text-xs transition disabled:opacity-20 hover:enabled:bg-white/10"
+                style={{ color: palette.text }}
+                title="Move down"
+              >
+                ▼
+              </button>
+            </div>
+          </div>
+        )
+      }
+
+      function App() {
+        const [wsState, setWsState] = useState(null)
+        // phase: 'idle' | 'recording' | 'review'
+        const [phase, setPhase] = useState('idle')
+        const [playbackUrl, setPlaybackUrl] = useState(null)
+        const [orderedLanes, setOrderedLanes] = useState([])
+        const [isPlaying, setIsPlaying] = useState(false)
+        const [sending, setSending] = useState(false)
+        const [sendResult, setSendResult] = useState(null) // null | 'ok' | 'error'
+        const [cameraError, setCameraError] = useState(null)
+        const [stream, setStream] = useState(null)
+
+        const previewRef = useRef(null)
+        const playbackRef = useRef(null)
+        const streamRef = useRef(null)
+        const objUrlRef = useRef(null)
+        const wsRef = useRef(null)
+
+        // ── WebSocket ────────────────────────────────────────────────────────
+        useEffect(() => {
+          function connect() {
+            const ws = new WebSocket(`ws://${location.host}`)
+            wsRef.current = ws
+            ws.onmessage = (e) => setWsState(JSON.parse(e.data).state)
+            ws.onclose = () => setTimeout(connect, 2000)
+          }
+          connect()
+          return () => wsRef.current?.close()
+        }, [])
+
+        // ── Initialize lane order from server state ───────────────────────────
+        useEffect(() => {
+          if (wsState) {
+            setOrderedLanes(Array.from({ length: wsState.numLanes }, (_, i) => i + 1))
+          }
+        }, [wsState?.numLanes])
+
+        // ── Camera init ───────────────────────────────────────────────────────
+        useEffect(() => {
+          if (!navigator.mediaDevices?.getUserMedia) {
+            setCameraError('Camera not available in this browser or context.')
+            return
+          }
+          navigator.mediaDevices
+            .getUserMedia({ video: true, audio: false })
+            .then((s) => {
+              streamRef.current = s
+              setStream(s)
+            })
+            .catch((err) => setCameraError(err.message))
+
+          return () => {
+            streamRef.current?.getTracks().forEach((t) => t.stop())
+          }
+        }, [])
+
+        // ── Assign stream to preview video element ───────────────────────────
+        useEffect(() => {
+          if (stream && previewRef.current && phase !== 'review') {
+            previewRef.current.srcObject = stream
+          }
+        }, [stream, phase])
+
+        // ── Load playback clip when entering review mode ──────────────────────
+        useEffect(() => {
+          if (phase === 'review' && playbackUrl && playbackRef.current) {
+            playbackRef.current.load()
+          }
+        }, [phase, playbackUrl])
+
+        // ── Recording ─────────────────────────────────────────────────────────
+        function startRecording() {
+          if (!streamRef.current || phase !== 'idle') return
+
+          // Clean up previous recording
+          if (objUrlRef.current) {
+            URL.revokeObjectURL(objUrlRef.current)
+            objUrlRef.current = null
+          }
+          setPlaybackUrl(null)
+          setIsPlaying(false)
+          setSendResult(null)
+
+          const mimeType = getSupportedMimeType()
+          const recorder = new MediaRecorder(
+            streamRef.current,
+            mimeType ? { mimeType } : {},
+          )
+          const chunks = []
+
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data)
+          }
+
+          recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: mimeType || 'video/webm' })
+            const url = URL.createObjectURL(blob)
+            objUrlRef.current = url
+            setPlaybackUrl(url)
+            setPhase('review')
+          }
+
+          recorder.start()
+          setPhase('recording')
+
+          setTimeout(() => {
+            if (recorder.state !== 'inactive') recorder.stop()
+          }, RECORD_MS)
+        }
+
+        function recordAgain() {
+          setPhase('idle')
+          setIsPlaying(false)
+          setSendResult(null)
+          // Re-attach stream to preview
+          if (streamRef.current && previewRef.current) {
+            previewRef.current.srcObject = streamRef.current
+          }
+        }
+
+        // ── Playback controls ─────────────────────────────────────────────────
+        function togglePlay() {
+          const v = playbackRef.current
+          if (!v) return
+          if (v.paused) {
+            v.play()
+          } else {
+            v.pause()
+          }
+        }
+
+        function restartPlayback() {
+          const v = playbackRef.current
+          if (!v) return
+          v.currentTime = 0
+          v.play()
+        }
+
+        function stepForward() {
+          const v = playbackRef.current
+          if (!v) return
+          v.pause()
+          const max = isNaN(v.duration) ? Infinity : v.duration
+          v.currentTime = Math.min(max, v.currentTime + FRAME_STEP)
+        }
+
+        function stepBack() {
+          const v = playbackRef.current
+          if (!v) return
+          v.pause()
+          v.currentTime = Math.max(0, v.currentTime - FRAME_STEP)
+        }
+
+        // ── Finish order ──────────────────────────────────────────────────────
+        function moveUp(idx) {
+          if (idx === 0) return
+          setOrderedLanes((prev) => {
+            const next = [...prev]
+            ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+            return next
+          })
+        }
+
+        function moveDown(idx) {
+          setOrderedLanes((prev) => {
+            if (idx >= prev.length - 1) return prev
+            const next = [...prev]
+            ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+            return next
+          })
+        }
+
+        // ── Send results ──────────────────────────────────────────────────────
+        async function sendResults() {
+          if (orderedLanes.length === 0 || sending) return
+          setSending(true)
+          setSendResult(null)
+          try {
+            const finishOrder = orderedLanes.map((lane) => ({ lane, gapMs: 0 }))
+            const r = await api('/api/judge-result', { finishOrder })
+            setSendResult(r.ok ? 'ok' : 'error')
+          } catch (_e) {
+            setSendResult('error')
+          } finally {
+            setSending(false)
+          }
+        }
+
+        // ── Render ────────────────────────────────────────────────────────────
+        if (!wsState) {
+          return (
+            <div className="flex items-center justify-center min-h-screen">
+              <div className="font-display text-2xl text-white/20 tracking-widest">
+                CONNECTING…
+              </div>
+            </div>
+          )
+        }
+
+        const { laneColors, heat } = wsState
+
+        return (
+          <div className="min-h-screen flex flex-col">
+            {/* ── Header ─────────────────────────────────────────────────── */}
+            <header className="border-b border-white/10 bg-black/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+              <div>
+                <div className="font-display text-3xl tracking-widest text-white leading-none">
+                  JUDGE ASSIST
+                </div>
+                <div className="font-condensed text-xs tracking-widest uppercase text-white/30">
+                  Manual Finish Review
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="font-condensed text-xs text-white/30">
+                  Heat{' '}
+                  <span className="font-display text-xl text-white">{heat}</span>
+                </div>
+                <a
+                  href="/manage"
+                  className="h-9 flex items-center px-3 rounded-lg border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 transition"
+                >
+                  Manager
+                </a>
+              </div>
+            </header>
+
+            {/* ── Body ───────────────────────────────────────────────────── */}
+            <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 flex flex-col gap-6">
+
+              {/* ── Camera / Video ──────────────────────────────────────── */}
+              <div>
+                <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+                  {phase === 'review' ? 'Recorded Clip' : 'Camera Preview'}
+                </div>
+
+                {/* Video container */}
+                <div
+                  className="rounded-2xl overflow-hidden border border-white/10 relative"
+                  style={{ background: '#000', aspectRatio: '16/9' }}
+                >
+                  {/* Live camera preview */}
+                  <video
+                    ref={previewRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                    style={{ display: phase === 'review' ? 'none' : 'block' }}
+                  />
+
+                  {/* Recorded clip playback */}
+                  <video
+                    ref={playbackRef}
+                    src={phase === 'review' ? playbackUrl : undefined}
+                    playsInline
+                    className="w-full h-full object-cover"
+                    style={{ display: phase === 'review' ? 'block' : 'none' }}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
+                  />
+
+                  {/* Recording overlay */}
+                  {phase === 'recording' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full bg-red-500 rec-dot" />
+                        <span className="font-display text-2xl text-white tracking-widest">
+                          RECORDING
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Camera unavailable */}
+                  {cameraError && phase !== 'review' && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70">
+                      <div className="text-4xl">📷</div>
+                      <div className="font-condensed text-sm text-red-400 text-center px-4">
+                        {cameraError}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Primary action row */}
+                <div className="mt-3 flex gap-2">
+                  {phase === 'idle' && (
+                    <button
+                      onClick={startRecording}
+                      disabled={!!cameraError}
+                      className="flex-1 py-3 rounded-xl font-display text-xl tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{
+                        background: 'rgba(239,68,68,0.15)',
+                        border: '1px solid rgba(239,68,68,0.4)',
+                        color: '#f87171',
+                      }}
+                    >
+                      ⬤  START RECORDING
+                    </button>
+                  )}
+
+                  {phase === 'recording' && (
+                    <div
+                      className="flex-1 py-3 rounded-xl font-display text-xl tracking-widest text-center select-none"
+                      style={{
+                        background: 'rgba(239,68,68,0.15)',
+                        border: '1px solid rgba(239,68,68,0.4)',
+                        color: '#f87171',
+                      }}
+                    >
+                      ⬤  RECORDING…
+                    </div>
+                  )}
+
+                  {phase === 'review' && (
+                    <button
+                      onClick={recordAgain}
+                      className="py-3 px-5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all"
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: 'rgba(255,255,255,0.45)',
+                      }}
+                    >
+                      ↺ Record Again
+                    </button>
+                  )}
+                </div>
+
+                {/* Playback controls — shown only in review mode */}
+                {phase === 'review' && (
+                  <>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={stepBack}
+                        className="flex-1 py-2.5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: 'rgba(255,255,255,0.6)',
+                        }}
+                        title="Step backward one frame (~1/30 s)"
+                      >
+                        ◀ Frame
+                      </button>
+
+                      <button
+                        onClick={togglePlay}
+                        className="flex-1 py-2.5 rounded-xl font-display text-xl tracking-widest transition-all"
+                        style={{
+                          background: isPlaying
+                            ? 'rgba(99,102,241,0.2)'
+                            : 'rgba(99,102,241,0.1)',
+                          border: '1px solid rgba(99,102,241,0.4)',
+                          color: '#a5b4fc',
+                        }}
+                        title={isPlaying ? 'Pause' : 'Play'}
+                      >
+                        {isPlaying ? '⏸ PAUSE' : '▶ PLAY'}
+                      </button>
+
+                      <button
+                        onClick={stepForward}
+                        className="flex-1 py-2.5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: 'rgba(255,255,255,0.6)',
+                        }}
+                        title="Step forward one frame (~1/30 s)"
+                      >
+                        Frame ▶
+                      </button>
+                    </div>
+
+                    <div className="mt-1 flex justify-center">
+                      <button
+                        onClick={restartPlayback}
+                        className="py-1.5 px-4 rounded-lg font-condensed text-xs uppercase tracking-widest transition"
+                        style={{ color: 'rgba(255,255,255,0.3)' }}
+                      >
+                        ↺ Restart Playback
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* ── Finish Order ────────────────────────────────────────── */}
+              <div>
+                <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-1">
+                  Finish Order
+                </div>
+                <div className="font-condensed text-xs text-white/20 mb-3">
+                  Use ▲▼ to arrange lanes in the order they crossed the finish line (1st at top)
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {orderedLanes.map((lane, idx) => (
+                    <LaneOrderCard
+                      key={lane}
+                      lane={lane}
+                      place={idx}
+                      laneColors={laneColors}
+                      canMoveUp={idx > 0}
+                      canMoveDown={idx < orderedLanes.length - 1}
+                      onMoveUp={() => moveUp(idx)}
+                      onMoveDown={() => moveDown(idx)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Send Results ────────────────────────────────────────── */}
+              <div className="pb-4">
+                {sendResult === 'ok' && (
+                  <div className="mb-3 py-2 px-4 rounded-xl font-condensed text-sm text-green-400 bg-green-950 border border-green-900">
+                    ✓ Results sent to guest display
+                  </div>
+                )}
+                {sendResult === 'error' && (
+                  <div className="mb-3 py-2 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
+                    ✕ Failed to send results — please try again
+                  </div>
+                )}
+
+                <button
+                  onClick={sendResults}
+                  disabled={sending || orderedLanes.length === 0}
+                  className="w-full py-4 rounded-xl font-display text-2xl tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{
+                    background: 'rgba(34,197,94,0.15)',
+                    border: '1px solid rgba(34,197,94,0.4)',
+                    color: '#4ade80',
+                  }}
+                >
+                  {sending ? 'SENDING…' : '📺  SEND RESULTS TO DISPLAY'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>
