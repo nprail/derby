@@ -36,3 +36,9 @@ body {
 .rec-dot {
   animation: rec-pulse 0.8s ease-in-out infinite;
 }
+
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}

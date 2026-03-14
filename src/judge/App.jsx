@@ -78,7 +78,7 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl border-2 px-4 py-3"
+      className="flex items-center gap-3 rounded-xl border-2 px-4 py-4"
       style={{
         background: palette.bg,
         borderColor: palette.border + '80',
@@ -87,7 +87,7 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
     >
       {/* Place label */}
       <div
-        className="font-display text-3xl w-12 text-center flex-shrink-0 leading-none"
+        className="font-display text-3xl w-14 text-center flex-shrink-0 leading-none"
         style={{ color: palette.text }}
       >
         {PLACE_LABELS[place]}
@@ -111,13 +111,16 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
 
       {place === 0 && <div className="text-xl flex-shrink-0">🏆</div>}
 
-      {/* Reorder buttons */}
+      {/* Reorder buttons — large touch targets */}
       <div className="flex flex-col gap-1 flex-shrink-0">
         <button
           onClick={onMoveUp}
           disabled={!canMoveUp}
-          className="w-8 h-7 flex items-center justify-center rounded-md font-condensed text-xs transition disabled:opacity-20 hover:enabled:bg-white/10"
-          style={{ color: palette.text }}
+          className="w-12 h-12 flex items-center justify-center rounded-xl text-base font-condensed transition active:scale-95 disabled:opacity-20"
+          style={{
+            color: palette.text,
+            background: canMoveUp ? palette.border + '20' : 'transparent',
+          }}
           title="Move up"
         >
           ▲
@@ -125,8 +128,11 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
         <button
           onClick={onMoveDown}
           disabled={!canMoveDown}
-          className="w-8 h-7 flex items-center justify-center rounded-md font-condensed text-xs transition disabled:opacity-20 hover:enabled:bg-white/10"
-          style={{ color: palette.text }}
+          className="w-12 h-12 flex items-center justify-center rounded-xl text-base font-condensed transition active:scale-95 disabled:opacity-20"
+          style={{
+            color: palette.text,
+            background: canMoveDown ? palette.border + '20' : 'transparent',
+          }}
           title="Move down"
         >
           ▼
@@ -291,22 +297,22 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="border-b border-white/10 bg-black/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+      <header className="border-b border-white/10 bg-black/60 backdrop-blur px-4 py-3 flex items-center justify-between sticky top-0 z-20">
         <div>
-          <div className="font-display text-3xl tracking-widest text-white leading-none">
+          <div className="font-display text-2xl tracking-widest text-white leading-none">
             JUDGE ASSIST
           </div>
           <div className="font-condensed text-xs tracking-widest uppercase text-white/30">
             Manual Finish Review
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="font-condensed text-xs text-white/30">
             Heat <span className="font-display text-xl text-white">{heat}</span>
           </div>
           <a
             href="/manage"
-            className="h-9 flex items-center px-3 rounded-lg border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 transition"
+            className="h-10 flex items-center px-4 rounded-xl border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 active:scale-95 transition"
           >
             Manager
           </a>
@@ -314,20 +320,28 @@ export default function App() {
       </header>
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 flex flex-col gap-6">
+      <div className="flex-1 max-w-2xl mx-auto w-full px-3 py-4 flex flex-col gap-5">
         {/* ── ZCam / Video ────────────────────────────────────────────────── */}
         <div>
-          <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
+          <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-2 flex items-center gap-2">
             {phase === 'review' ? 'Recorded Clip' : 'ZCam E2M4'}
             {zcamEnabled && phase !== 'review' && (
               <span className="font-condensed text-xs text-green-400">● connected</span>
             )}
           </div>
 
-          {/* Video container */}
+          {/* Video container — fills ~60% viewport height in review mode */}
           <div
-            className="rounded-2xl overflow-hidden border border-white/10 relative"
-            style={{ background: '#000', aspectRatio: '16/9' }}
+            className="rounded-2xl overflow-hidden border border-white/10 relative w-full"
+            style={{
+              background: '#000',
+              ...(phase === 'review'
+                ? {
+                    height: '60vh',
+                    minHeight: '220px' /* ensures usable video area even on very small screens */,
+                  }
+                : { aspectRatio: '16/9' }),
+            }}
           >
             {/* Recorded clip playback (shown in review phase) */}
             <video
@@ -387,7 +401,7 @@ export default function App() {
 
           {/* Recording error */}
           {recordError && (
-            <div className="mt-2 py-2 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
+            <div className="mt-2 py-3 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
               ✕ {recordError}
             </div>
           )}
@@ -398,7 +412,7 @@ export default function App() {
               <button
                 onClick={startRecording}
                 disabled={!zcamEnabled}
-                className="flex-1 py-3 rounded-xl font-display text-xl tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex-1 py-4 rounded-xl font-display text-xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                 style={{
                   background: 'rgba(239,68,68,0.15)',
                   border: '1px solid rgba(239,68,68,0.4)',
@@ -411,7 +425,7 @@ export default function App() {
 
             {phase === 'recording' && (
               <div
-                className="flex-1 py-3 rounded-xl font-display text-xl tracking-widest text-center select-none"
+                className="flex-1 py-4 rounded-xl font-display text-xl tracking-widest text-center select-none"
                 style={{
                   background: 'rgba(239,68,68,0.15)',
                   border: '1px solid rgba(239,68,68,0.4)',
@@ -425,7 +439,7 @@ export default function App() {
             {phase === 'review' && (
               <button
                 onClick={recordAgain}
-                className="py-3 px-5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all"
+                className="py-4 px-5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all active:scale-95"
                 style={{
                   background: 'rgba(255,255,255,0.05)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -443,7 +457,7 @@ export default function App() {
               <div className="mt-2 flex gap-2">
                 <button
                   onClick={stepBack}
-                  className="flex-1 py-2.5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all"
+                  className="flex-1 py-4 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all active:scale-95"
                   style={{
                     background: 'rgba(255,255,255,0.05)',
                     border: '1px solid rgba(255,255,255,0.1)',
@@ -456,7 +470,7 @@ export default function App() {
 
                 <button
                   onClick={togglePlay}
-                  className="flex-1 py-2.5 rounded-xl font-display text-xl tracking-widest transition-all"
+                  className="flex-1 py-4 rounded-xl font-display text-xl tracking-widest transition-all active:scale-95"
                   style={{
                     background: isPlaying ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
                     border: '1px solid rgba(99,102,241,0.4)',
@@ -469,7 +483,7 @@ export default function App() {
 
                 <button
                   onClick={stepForward}
-                  className="flex-1 py-2.5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all"
+                  className="flex-1 py-4 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all active:scale-95"
                   style={{
                     background: 'rgba(255,255,255,0.05)',
                     border: '1px solid rgba(255,255,255,0.1)',
@@ -481,11 +495,15 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="mt-1 flex justify-center">
+              <div className="mt-2 flex justify-center">
                 <button
                   onClick={restartPlayback}
-                  className="py-1.5 px-4 rounded-lg font-condensed text-xs uppercase tracking-widest transition"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
+                  className="py-3 px-6 rounded-xl font-condensed text-xs uppercase tracking-widest transition-all active:scale-95"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'rgba(255,255,255,0.35)',
+                  }}
                 >
                   ↺ Restart Playback
                 </button>
@@ -520,14 +538,14 @@ export default function App() {
         </div>
 
         {/* ── Send Results ──────────────────────────────────────────────────── */}
-        <div className="pb-4">
+        <div className="pb-6">
           {sendResult === 'ok' && (
-            <div className="mb-3 py-2 px-4 rounded-xl font-condensed text-sm text-green-400 bg-green-950 border border-green-900">
+            <div className="mb-3 py-3 px-4 rounded-xl font-condensed text-sm text-green-400 bg-green-950 border border-green-900">
               ✓ Results sent to guest display
             </div>
           )}
           {sendResult === 'error' && (
-            <div className="mb-3 py-2 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
+            <div className="mb-3 py-3 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
               ✕ Failed to send results — please try again
             </div>
           )}
@@ -535,7 +553,7 @@ export default function App() {
           <button
             onClick={sendResults}
             disabled={sending || orderedLanes.length === 0}
-            className="w-full py-4 rounded-xl font-display text-2xl tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full py-5 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(34,197,94,0.15)',
               border: '1px solid rgba(34,197,94,0.4)',
