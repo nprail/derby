@@ -75,105 +75,113 @@ async function api(path, body) {
 function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMoveUp, onMoveDown }) {
   const colorName = laneColors[lane] || 'White'
   const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+  const isFirst = place === 0
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl border-2 px-4 py-4"
+      className="relative rounded-2xl border-2 overflow-hidden slide-in"
       style={{
+        animationDelay: `${place * 0.06}s`,
         background: palette.bg,
-        borderColor: palette.border + '80',
-        boxShadow: `0 0 12px ${palette.glow}30`,
+        borderColor: isFirst ? palette.border : palette.border + '80',
+        boxShadow: isFirst
+          ? `0 0 24px ${palette.glow}, 0 0 48px ${palette.glow}40`
+          : `0 0 12px ${palette.glow}40`,
       }}
     >
-      {/* Place label */}
-      <div
-        className="font-display text-3xl w-14 text-center flex-shrink-0 leading-none"
-        style={{ color: palette.text }}
-      >
-        {PLACE_LABELS[place]}
-      </div>
+      {/* Checkered bar for 1st place */}
+      {isFirst && (
+        <div className="checkered-bar absolute top-0 left-0 right-0 h-1.5 opacity-60" />
+      )}
 
-      {/* Divider */}
-      <div className="w-px self-stretch opacity-20" style={{ background: palette.border }} />
+      {/* Track stripe texture */}
+      <div className="track-stripe absolute inset-0 pointer-events-none" />
 
-      {/* Lane info */}
-      <div className="flex-1 min-w-0">
+      <div className="relative flex items-center gap-3 px-4 py-4">
+        {/* Place label */}
         <div
-          className="font-condensed text-xs opacity-40 uppercase tracking-widest"
+          className="font-display text-3xl w-14 text-center flex-shrink-0 leading-none"
           style={{ color: palette.text }}
         >
-          Lane {lane}
+          {PLACE_LABELS[place]}
         </div>
-        <div className="font-display text-2xl leading-tight" style={{ color: palette.text }}>
-          {colorName}
+
+        {/* Divider */}
+        <div className="w-px self-stretch opacity-30" style={{ background: palette.border }} />
+
+        {/* Lane info */}
+        <div className="flex-1 min-w-0">
+          <div
+            className="font-condensed text-xs font-semibold opacity-40 uppercase tracking-widest"
+            style={{ color: palette.text }}
+          >
+            Lane {lane}
+          </div>
+          <div className="font-display text-2xl leading-tight" style={{ color: palette.text }}>
+            {colorName}
+          </div>
         </div>
-      </div>
 
-      {place === 0 && <div className="text-xl flex-shrink-0">🏆</div>}
+        {isFirst && <div className="text-xl flex-shrink-0">🏆</div>}
 
-      {/* Reorder buttons — large touch targets */}
-      <div className="flex flex-col gap-1 flex-shrink-0">
-        <button
-          onClick={onMoveUp}
-          disabled={!canMoveUp}
-          className="w-12 h-12 flex items-center justify-center rounded-xl text-base font-condensed transition active:scale-95 disabled:opacity-20"
-          style={{
-            color: palette.text,
-            background: canMoveUp ? palette.border + '20' : 'transparent',
-          }}
-          title="Move up"
-        >
-          ▲
-        </button>
-        <button
-          onClick={onMoveDown}
-          disabled={!canMoveDown}
-          className="w-12 h-12 flex items-center justify-center rounded-xl text-base font-condensed transition active:scale-95 disabled:opacity-20"
-          style={{
-            color: palette.text,
-            background: canMoveDown ? palette.border + '20' : 'transparent',
-          }}
-          title="Move down"
-        >
-          ▼
-        </button>
+        {/* Reorder buttons — large touch targets */}
+        <div className="flex flex-col gap-1 flex-shrink-0">
+          <button
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            className="w-12 h-12 flex items-center justify-center rounded-xl text-base font-condensed transition active:scale-95 disabled:opacity-20"
+            style={{
+              color: palette.text,
+              background: canMoveUp ? palette.border + '25' : 'transparent',
+            }}
+            title="Move up"
+          >
+            ▲
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            className="w-12 h-12 flex items-center justify-center rounded-xl text-base font-condensed transition active:scale-95 disabled:opacity-20"
+            style={{
+              color: palette.text,
+              background: canMoveDown ? palette.border + '25' : 'transparent',
+            }}
+            title="Move down"
+          >
+            ▼
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
 // ── History card ──────────────────────────────────────────────────────────────
-function HistoryCard({ entry, laneColors }) {
+// Renders one row — used inside a rounded-xl overflow-hidden container
+function HistoryRow({ entry, laneColors, isLast }) {
   return (
     <div
-      className="rounded-xl border px-4 py-3 flex items-center gap-4"
-      style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.07)' }}
+      className={`flex items-center gap-3 px-4 py-2.5 ${!isLast ? 'border-b border-white/5' : ''}`}
     >
-      <div className="flex-shrink-0 text-center w-14">
-        <div className="font-condensed text-xs text-white/25 uppercase tracking-widest">Heat</div>
-        <div className="font-display text-2xl text-white/70 leading-none">{entry.heat}</div>
-      </div>
-      <div className="w-px self-stretch bg-white/10" />
-      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+      <span className="font-condensed text-xs text-white/30 w-14 flex-shrink-0">
+        Heat {entry.heat}
+      </span>
+      <div className="flex gap-1.5 flex-wrap flex-1">
         {entry.finishOrder.map((item, idx) => {
           const colorName = laneColors[item.lane] || 'White'
           const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
           return (
-            <div key={item.lane} className="flex items-center gap-1">
-              {idx > 0 && <span className="text-white/20 text-xs">›</span>}
-              <div
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
-                style={{ background: palette.bg, border: `1px solid ${palette.border}60` }}
-              >
-                <div
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ background: palette.dot }}
-                />
-                <span className="font-condensed text-xs" style={{ color: palette.text }}>
-                  {colorName}
-                </span>
-              </div>
-            </div>
+            <span
+              key={item.lane}
+              className="font-condensed text-xs px-2 py-0.5 rounded"
+              style={{
+                background: palette.bg,
+                color: palette.text,
+                border: `1px solid ${palette.border}50`,
+              }}
+            >
+              {idx + 1}. {colorName}
+            </span>
           )
         })}
       </div>
@@ -336,22 +344,27 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="border-b border-white/10 bg-black/60 backdrop-blur px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+      <header className="relative border-b border-white/10 bg-black/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-20 scanline-overlay">
+        {/* Subtle checkered accent strip at very top */}
+        <div className="checkered-bar absolute top-0 left-0 right-0 h-[2px] opacity-30" />
         <div>
-          <div className="font-display text-2xl tracking-widest text-white leading-none">
+          <div className="font-display text-3xl tracking-widest text-white leading-none">
             JUDGE ASSIST
           </div>
-          <div className="font-condensed text-xs tracking-widest uppercase text-white/30">
+          <div className="font-condensed text-xs tracking-widest uppercase text-white/30 mt-0.5">
             Manual Finish Review
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="font-condensed text-xs text-white/30">
-            Heat <span className="font-display text-xl text-white">{heat}</span>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="font-condensed text-xs uppercase tracking-widest text-white/30">
+              Heat
+            </div>
+            <div className="font-display text-3xl text-white leading-none">{heat}</div>
           </div>
           <a
             href="/manage"
-            className="h-10 flex items-center px-4 rounded-xl border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 active:scale-95 transition"
+            className="h-9 flex items-center px-3 rounded-lg border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 active:scale-95 transition"
           >
             Manager
           </a>
@@ -359,7 +372,7 @@ export default function App() {
       </header>
 
       {/* ── Two-column body (tablet+) / single-column (mobile) ──────────────── */}
-      <div className="flex-1 max-w-5xl mx-auto w-full px-3 py-4 md:grid md:grid-cols-[3fr_2fr] md:gap-6 md:items-start">
+      <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-5 md:grid md:grid-cols-[3fr_2fr] md:gap-6 md:items-start">
 
         {/* ── LEFT: ZCam / Video + playback controls ────────────────────────── */}
         <div className="flex flex-col gap-3">
@@ -368,55 +381,73 @@ export default function App() {
             {zcamEnabled && phase !== 'review' && (
               <span className="font-condensed text-xs text-green-400">● connected</span>
             )}
+            {!zcamEnabled && phase === 'idle' && (
+              <span className="font-condensed text-xs text-yellow-500/70">● not configured</span>
+            )}
           </div>
 
           {/* Video container — 60vh on mobile, full column height on tablet */}
           <div
-            className="rounded-2xl overflow-hidden border border-white/10 relative w-full"
+            className="rounded-2xl overflow-hidden border border-white/10 relative w-full scanline-overlay"
             style={{
-              background: '#000',
+              background: '#060608',
               ...(phase === 'review'
                 ? {
                     height: '60vh',
-                    minHeight: '220px' /* ensures usable video area even on very small screens */,
+                    minHeight: '220px',
                   }
                 : { aspectRatio: '16/9' }),
             }}
           >
+            {/* Track stripe texture on the video/placeholder area */}
+            <div className="track-stripe absolute inset-0 pointer-events-none opacity-60" />
+
             {/* Recorded clip playback (shown in review phase) */}
             <video
               ref={playbackRef}
               src={phase === 'review' ? playbackUrl : undefined}
               playsInline
               muted
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain relative"
               style={{ display: phase === 'review' ? 'block' : 'none', background: '#000' }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               onEnded={() => setIsPlaying(false)}
             />
 
-            {/* Idle / ZCam not configured placeholder */}
+            {/* Idle placeholder */}
             {phase === 'idle' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
                 {zcamEnabled ? (
                   <>
-                    <div className="text-5xl">🎥</div>
-                    <div className="font-condensed text-sm text-white/40 text-center px-4">
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
+                      style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)' }}
+                    >
+                      🎥
+                    </div>
+                    <div className="font-condensed text-sm text-white/40 text-center px-4 tracking-wide">
                       ZCam E2M4 ready
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="text-5xl opacity-40">🎥</div>
-                    <div className="font-condensed text-sm text-yellow-400/80 text-center px-4">
-                      ZCam not configured
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl opacity-40"
+                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.15)' }}
+                    >
+                      🎥
                     </div>
-                    <div className="font-condensed text-xs text-white/25 text-center px-6">
-                      Set the ZCam IP address in{' '}
-                      <a href="/manage" className="underline text-white/40 hover:text-white/60">
-                        Settings
-                      </a>
+                    <div>
+                      <div className="font-condensed text-sm text-yellow-400/80 text-center px-4">
+                        ZCam not configured
+                      </div>
+                      <div className="font-condensed text-xs text-white/25 text-center px-6 mt-1">
+                        Set the ZCam IP in{' '}
+                        <a href="/manage" className="underline text-white/40 hover:text-white/60">
+                          Settings
+                        </a>
+                      </div>
                     </div>
                   </>
                 )}
@@ -425,7 +456,7 @@ export default function App() {
 
             {/* Recording in-progress overlay */}
             {phase === 'recording' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70">
                 <div className="flex items-center gap-3">
                   <div className="w-4 h-4 rounded-full bg-red-500 rec-dot" />
                   <span className="font-display text-2xl text-white tracking-widest">
@@ -452,34 +483,37 @@ export default function App() {
               <button
                 onClick={startRecording}
                 disabled={!zcamEnabled}
-                className="flex-1 py-4 rounded-xl font-display text-xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex-1 py-3 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                 style={{
                   background: 'rgba(239,68,68,0.15)',
                   border: '1px solid rgba(239,68,68,0.4)',
                   color: '#f87171',
                 }}
               >
-                ⬤ START RECORDING
+                ⬤  START RECORDING
               </button>
             )}
 
             {phase === 'recording' && (
               <div
-                className="flex-1 py-4 rounded-xl font-display text-xl tracking-widest text-center select-none"
+                className="flex-1 py-3 rounded-xl font-display text-2xl tracking-widest text-center select-none"
                 style={{
                   background: 'rgba(239,68,68,0.15)',
                   border: '1px solid rgba(239,68,68,0.4)',
                   color: '#f87171',
                 }}
               >
-                ⬤ RECORDING…
+                <span className="inline-flex items-center gap-3">
+                  <span className="w-3 h-3 rounded-full bg-red-500 rec-dot inline-block" />
+                  RECORDING…
+                </span>
               </div>
             )}
 
             {phase === 'review' && (
               <button
                 onClick={recordAgain}
-                className="py-4 px-5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all active:scale-95"
+                className="py-3 px-5 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all active:scale-95"
                 style={{
                   background: 'rgba(255,255,255,0.05)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -510,7 +544,7 @@ export default function App() {
 
                 <button
                   onClick={togglePlay}
-                  className="flex-1 py-4 rounded-xl font-display text-xl tracking-widest transition-all active:scale-95"
+                  className="flex-1 py-4 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95"
                   style={{
                     background: isPlaying ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
                     border: '1px solid rgba(99,102,241,0.4)',
@@ -553,9 +587,8 @@ export default function App() {
         </div>
 
         {/* ── RIGHT: Finish Order + Send Results ───────────────────────────── */}
-        {/* On mobile: normal flow below video; on tablet: sticky right column */}
-        <div className="flex flex-col gap-4 mt-5 md:mt-0 md:sticky md:top-[68px]">
-          {/* Finish Order */}
+        <div className="flex flex-col gap-4 mt-5 md:mt-0 md:sticky md:top-[76px]">
+          {/* Section label */}
           <div>
             <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-1">
               Finish Order
@@ -594,14 +627,14 @@ export default function App() {
             <button
               onClick={sendResults}
               disabled={sending || orderedLanes.length === 0}
-              className="w-full py-5 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="w-full py-3 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
               style={{
                 background: 'rgba(34,197,94,0.15)',
                 border: '1px solid rgba(34,197,94,0.4)',
                 color: '#4ade80',
               }}
             >
-              {sending ? 'SENDING…' : '📺  SEND RESULTS TO DISPLAY'}
+              {sending ? 'SENDING…' : '📺  SEND TO DISPLAY'}
             </button>
           </div>
         </div>
@@ -609,14 +642,19 @@ export default function App() {
 
       {/* ── Previous Finishes (full-width below grid) ─────────────────────────── */}
       {history.length > 0 && (
-        <div className="max-w-5xl mx-auto w-full px-3 pb-8">
+        <div className="max-w-5xl mx-auto w-full px-4 pb-8">
           <div className="border-t border-white/8 pt-5">
             <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
               Previous Finishes
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="rounded-xl border border-white/5 overflow-hidden">
               {history.map((entry, i) => (
-                <HistoryCard key={i} entry={entry} laneColors={laneColors} />
+                <HistoryRow
+                  key={i}
+                  entry={entry}
+                  laneColors={laneColors}
+                  isLast={i === history.length - 1}
+                />
               ))}
             </div>
           </div>
