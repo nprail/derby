@@ -79,9 +79,8 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
 
   return (
     <div
-      className="relative rounded-2xl border-2 overflow-hidden slide-in"
+      className="relative rounded-2xl border-2 overflow-hidden"
       style={{
-        animationDelay: `${place * 0.06}s`,
         background: palette.bg,
         borderColor: isFirst ? palette.border : palette.border + '80',
         boxShadow: isFirst
@@ -89,11 +88,6 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
           : `0 0 12px ${palette.glow}40`,
       }}
     >
-      {/* Checkered bar for 1st place */}
-      {isFirst && (
-        <div className="checkered-bar absolute top-0 left-0 right-0 h-1.5 opacity-60" />
-      )}
-
       {/* Track stripe texture */}
       <div className="track-stripe absolute inset-0 pointer-events-none" />
 
@@ -344,9 +338,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="relative border-b border-white/10 bg-black/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-20 scanline-overlay">
-        {/* Subtle checkered accent strip at very top */}
-        <div className="checkered-bar absolute top-0 left-0 right-0 h-[2px] opacity-30" />
+      <header className="border-b border-white/10 bg-black/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-20">
         <div>
           <div className="font-display text-3xl tracking-widest text-white leading-none">
             JUDGE ASSIST
@@ -355,24 +347,22 @@ export default function App() {
             Manual Finish Review
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="font-condensed text-xs uppercase tracking-widest text-white/30">
-              Heat
-            </div>
-            <div className="font-display text-3xl text-white leading-none">{heat}</div>
+        <div className="flex items-center gap-3">
+          <div className="font-condensed text-xs text-white/30">
+            Heat{' '}
+            <span className="font-display text-xl text-white">{heat}</span>
           </div>
           <a
             href="/manage"
-            className="h-9 flex items-center px-3 rounded-lg border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 active:scale-95 transition"
+            className="h-9 flex items-center px-3 rounded-lg border border-white/10 font-condensed text-xs uppercase tracking-widest text-white/40 hover:text-white hover:border-white/30 hover:bg-white/5 transition"
           >
             Manager
           </a>
         </div>
       </header>
 
-      {/* ── Two-column body (tablet+) / single-column (mobile) ──────────────── */}
-      <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-5 md:grid md:grid-cols-[3fr_2fr] md:gap-6 md:items-start">
+      {/* ── Two-column body (lg+) / single-column (mobile + tablet) ────────── */}
+      <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-5 lg:grid lg:grid-cols-[3fr_2fr] lg:gap-6 lg:items-start">
 
         {/* ── LEFT: ZCam / Video + playback controls ────────────────────────── */}
         <div className="flex flex-col gap-3">
@@ -388,7 +378,7 @@ export default function App() {
 
           {/* Video container — 60vh on mobile, full column height on tablet */}
           <div
-            className="rounded-2xl overflow-hidden border border-white/10 relative w-full scanline-overlay"
+            className="rounded-2xl overflow-hidden border border-white/10 relative w-full"
             style={{
               background: '#060608',
               ...(phase === 'review'
@@ -399,9 +389,6 @@ export default function App() {
                 : { aspectRatio: '16/9' }),
             }}
           >
-            {/* Track stripe texture on the video/placeholder area */}
-            <div className="track-stripe absolute inset-0 pointer-events-none opacity-60" />
-
             {/* Recorded clip playback (shown in review phase) */}
             <video
               ref={playbackRef}
@@ -587,7 +574,7 @@ export default function App() {
         </div>
 
         {/* ── RIGHT: Finish Order + Send Results ───────────────────────────── */}
-        <div className="flex flex-col gap-4 mt-5 md:mt-0 md:sticky md:top-[76px]">
+        <div className="flex flex-col gap-4 mt-5 lg:mt-0 lg:sticky lg:top-[86px]">
           {/* Section label */}
           <div>
             <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-1">
