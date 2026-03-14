@@ -142,6 +142,45 @@ function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMove
   )
 }
 
+// ── History card ──────────────────────────────────────────────────────────────
+function HistoryCard({ entry, laneColors }) {
+  return (
+    <div
+      className="rounded-xl border px-4 py-3 flex items-center gap-4"
+      style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.07)' }}
+    >
+      <div className="flex-shrink-0 text-center w-14">
+        <div className="font-condensed text-xs text-white/25 uppercase tracking-widest">Heat</div>
+        <div className="font-display text-2xl text-white/70 leading-none">{entry.heat}</div>
+      </div>
+      <div className="w-px self-stretch bg-white/10" />
+      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+        {entry.finishOrder.map((item, idx) => {
+          const colorName = laneColors[item.lane] || 'White'
+          const palette = LANE_PALETTES[colorName] || LANE_PALETTES.White
+          return (
+            <div key={item.lane} className="flex items-center gap-1">
+              {idx > 0 && <span className="text-white/20 text-xs">›</span>}
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+                style={{ background: palette.bg, border: `1px solid ${palette.border}60` }}
+              >
+                <div
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: palette.dot }}
+                />
+                <span className="font-condensed text-xs" style={{ color: palette.text }}>
+                  {colorName}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [wsState, setWsState] = useState(null)
   // phase: 'idle' | 'recording' | 'review'
@@ -292,7 +331,7 @@ export default function App() {
     )
   }
 
-  const { laneColors, heat, zcamEnabled } = wsState
+  const { laneColors, heat, zcamEnabled, history = [] } = wsState
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -319,18 +358,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="flex-1 max-w-2xl mx-auto w-full px-3 py-4 flex flex-col gap-5">
-        {/* ── ZCam / Video ────────────────────────────────────────────────── */}
-        <div>
-          <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-2 flex items-center gap-2">
+      {/* ── Two-column body (tablet+) / single-column (mobile) ──────────────── */}
+      <div className="flex-1 max-w-5xl mx-auto w-full px-3 py-4 md:grid md:grid-cols-[3fr_2fr] md:gap-6 md:items-start">
+
+        {/* ── LEFT: ZCam / Video + playback controls ────────────────────────── */}
+        <div className="flex flex-col gap-3">
+          <div className="font-condensed text-xs uppercase tracking-widest text-white/30 flex items-center gap-2">
             {phase === 'review' ? 'Recorded Clip' : 'ZCam E2M4'}
             {zcamEnabled && phase !== 'review' && (
               <span className="font-condensed text-xs text-green-400">● connected</span>
             )}
           </div>
 
-          {/* Video container — fills ~60% viewport height in review mode */}
+          {/* Video container — 60vh on mobile, full column height on tablet */}
           <div
             className="rounded-2xl overflow-hidden border border-white/10 relative w-full"
             style={{
@@ -401,13 +441,13 @@ export default function App() {
 
           {/* Recording error */}
           {recordError && (
-            <div className="mt-2 py-3 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
+            <div className="py-3 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
               ✕ {recordError}
             </div>
           )}
 
           {/* Primary action row */}
-          <div className="mt-3 flex gap-2">
+          <div className="flex gap-2">
             {phase === 'idle' && (
               <button
                 onClick={startRecording}
@@ -454,7 +494,7 @@ export default function App() {
           {/* Playback controls — shown only in review mode */}
           {phase === 'review' && (
             <>
-              <div className="mt-2 flex gap-2">
+              <div className="flex gap-2">
                 <button
                   onClick={stepBack}
                   className="flex-1 py-4 rounded-xl font-condensed text-sm uppercase tracking-widest transition-all active:scale-95"
@@ -495,7 +535,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="mt-2 flex justify-center">
+              <div className="flex justify-center">
                 <button
                   onClick={restartPlayback}
                   className="py-3 px-6 rounded-xl font-condensed text-xs uppercase tracking-widest transition-all active:scale-95"
@@ -512,58 +552,76 @@ export default function App() {
           )}
         </div>
 
-        {/* ── Finish Order ──────────────────────────────────────────────────── */}
-        <div>
-          <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-1">
-            Finish Order
-          </div>
-          <div className="font-condensed text-xs text-white/20 mb-3">
-            Use ▲▼ to arrange lanes in the order they crossed the finish line (1st at top)
-          </div>
-
-          <div className="flex flex-col gap-2">
-            {orderedLanes.map((lane, idx) => (
-              <LaneOrderCard
-                key={lane}
-                lane={lane}
-                place={idx}
-                laneColors={laneColors}
-                canMoveUp={idx > 0}
-                canMoveDown={idx < orderedLanes.length - 1}
-                onMoveUp={() => moveUp(idx)}
-                onMoveDown={() => moveDown(idx)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Send Results ──────────────────────────────────────────────────── */}
-        <div className="pb-6">
-          {sendResult === 'ok' && (
-            <div className="mb-3 py-3 px-4 rounded-xl font-condensed text-sm text-green-400 bg-green-950 border border-green-900">
-              ✓ Results sent to guest display
+        {/* ── RIGHT: Finish Order + Send Results ───────────────────────────── */}
+        {/* On mobile: normal flow below video; on tablet: sticky right column */}
+        <div className="flex flex-col gap-4 mt-5 md:mt-0 md:sticky md:top-[68px]">
+          {/* Finish Order */}
+          <div>
+            <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-1">
+              Finish Order
             </div>
-          )}
-          {sendResult === 'error' && (
-            <div className="mb-3 py-3 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
-              ✕ Failed to send results — please try again
+            <div className="font-condensed text-xs text-white/20 mb-3">
+              Use ▲▼ to arrange lanes in finish order (1st at top)
             </div>
-          )}
+            <div className="flex flex-col gap-2">
+              {orderedLanes.map((lane, idx) => (
+                <LaneOrderCard
+                  key={lane}
+                  lane={lane}
+                  place={idx}
+                  laneColors={laneColors}
+                  canMoveUp={idx > 0}
+                  canMoveDown={idx < orderedLanes.length - 1}
+                  onMoveUp={() => moveUp(idx)}
+                  onMoveDown={() => moveDown(idx)}
+                />
+              ))}
+            </div>
+          </div>
 
-          <button
-            onClick={sendResults}
-            disabled={sending || orderedLanes.length === 0}
-            className="w-full py-5 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-            style={{
-              background: 'rgba(34,197,94,0.15)',
-              border: '1px solid rgba(34,197,94,0.4)',
-              color: '#4ade80',
-            }}
-          >
-            {sending ? 'SENDING…' : '📺  SEND RESULTS TO DISPLAY'}
-          </button>
+          {/* Send Results */}
+          <div className="pb-2">
+            {sendResult === 'ok' && (
+              <div className="mb-3 py-3 px-4 rounded-xl font-condensed text-sm text-green-400 bg-green-950 border border-green-900">
+                ✓ Results sent to guest display
+              </div>
+            )}
+            {sendResult === 'error' && (
+              <div className="mb-3 py-3 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
+                ✕ Failed to send results — please try again
+              </div>
+            )}
+            <button
+              onClick={sendResults}
+              disabled={sending || orderedLanes.length === 0}
+              className="w-full py-5 rounded-xl font-display text-2xl tracking-widest transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{
+                background: 'rgba(34,197,94,0.15)',
+                border: '1px solid rgba(34,197,94,0.4)',
+                color: '#4ade80',
+              }}
+            >
+              {sending ? 'SENDING…' : '📺  SEND RESULTS TO DISPLAY'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ── Previous Finishes (full-width below grid) ─────────────────────────── */}
+      {history.length > 0 && (
+        <div className="max-w-5xl mx-auto w-full px-3 pb-8">
+          <div className="border-t border-white/8 pt-5">
+            <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
+              Previous Finishes
+            </div>
+            <div className="flex flex-col gap-2">
+              {history.map((entry, i) => (
+                <HistoryCard key={i} entry={entry} laneColors={laneColors} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
