@@ -270,6 +270,31 @@ app.post('/api/clear-display', (req, res) => {
   res.json({ ok: true })
 })
 
+// Called by the judge page to record a 1-second clip via the ZCam and return
+// the video URL so the judge can review the finish.
+app.post('/api/judge-record', async (req, res) => {
+  if (!zcam) {
+    return res.status(400).json({ error: 'ZCam is not configured. Set the ZCam IP in Settings.' })
+  }
+  const started = await zcam.startRecording()
+  if (!started) {
+    return res.status(500).json({ error: 'ZCam failed to start recording.' })
+  }
+  try {
+    // Record for 1 second then stop and retrieve the clip
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    const url = await zcam.stopAndFetchVideo(state.heat)
+    if (!url) {
+      return res.status(500).json({ error: 'ZCam: video could not be retrieved.' })
+    }
+    res.json({ ok: true, videoUrl: url })
+  } catch (err) {
+    // Best-effort: attempt to stop the camera if recording may still be active
+    zcam.stopAndFetchVideo(state.heat).catch(() => {})
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Called by the judge page to manually set heat results without sensors.
 // { finishOrder: [{ lane: number, gapMs?: number }, …] }
 app.post('/api/judge-result', (req, res) => {

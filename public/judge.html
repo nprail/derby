@@ -32,16 +32,6 @@
         font-family: 'Barlow Condensed', sans-serif;
       }
 
-      @keyframes pulse-ring {
-        0% {
-          transform: scale(1);
-          opacity: 1;
-        }
-        100% {
-          transform: scale(1.6);
-          opacity: 0;
-        }
-      }
       @keyframes rec-pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.2; }
@@ -117,7 +107,6 @@
       const { useState, useEffect, useRef } = React
 
       const PLACE_LABELS = ['1ST', '2ND', '3RD', '4TH', '5TH', '6TH', '7TH', '8TH']
-      const RECORD_MS = 1000
       // Step size in seconds for frame-by-frame (approx 1 frame at 30 fps)
       const FRAME_STEP = 1 / 30
 
@@ -128,14 +117,6 @@
           body: JSON.stringify(body),
         })
         return res.json()
-      }
-
-      function getSupportedMimeType() {
-        const candidates = ['video/webm;codecs=vp8', 'video/webm', 'video/mp4']
-        for (const t of candidates) {
-          if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t
-        }
-        return ''
       }
 
       function LaneOrderCard({ lane, place, laneColors, canMoveUp, canMoveDown, onMoveUp, onMoveDown }) {
@@ -214,13 +195,9 @@
         const [isPlaying, setIsPlaying] = useState(false)
         const [sending, setSending] = useState(false)
         const [sendResult, setSendResult] = useState(null) // null | 'ok' | 'error'
-        const [cameraError, setCameraError] = useState(null)
-        const [stream, setStream] = useState(null)
+        const [recordError, setRecordError] = useState(null)
 
-        const previewRef = useRef(null)
         const playbackRef = useRef(null)
-        const streamRef = useRef(null)
-        const objUrlRef = useRef(null)
         const wsRef = useRef(null)
 
         // ── WebSocket ────────────────────────────────────────────────────────
@@ -242,32 +219,6 @@
           }
         }, [wsState?.numLanes])
 
-        // ── Camera init ───────────────────────────────────────────────────────
-        useEffect(() => {
-          if (!navigator.mediaDevices?.getUserMedia) {
-            setCameraError('Camera not available in this browser or context.')
-            return
-          }
-          navigator.mediaDevices
-            .getUserMedia({ video: true, audio: false })
-            .then((s) => {
-              streamRef.current = s
-              setStream(s)
-            })
-            .catch((err) => setCameraError(err.message))
-
-          return () => {
-            streamRef.current?.getTracks().forEach((t) => t.stop())
-          }
-        }, [])
-
-        // ── Assign stream to preview video element ───────────────────────────
-        useEffect(() => {
-          if (stream && previewRef.current && phase !== 'review') {
-            previewRef.current.srcObject = stream
-          }
-        }, [stream, phase])
-
         // ── Load playback clip when entering review mode ──────────────────────
         useEffect(() => {
           if (phase === 'review' && playbackUrl && playbackRef.current) {
@@ -275,54 +226,37 @@
           }
         }, [phase, playbackUrl])
 
-        // ── Recording ─────────────────────────────────────────────────────────
-        function startRecording() {
-          if (!streamRef.current || phase !== 'idle') return
-
-          // Clean up previous recording
-          if (objUrlRef.current) {
-            URL.revokeObjectURL(objUrlRef.current)
-            objUrlRef.current = null
-          }
+        // ── Recording via ZCam ────────────────────────────────────────────────
+        async function startRecording() {
+          if (phase !== 'idle') return
+          setRecordError(null)
           setPlaybackUrl(null)
           setIsPlaying(false)
           setSendResult(null)
-
-          const mimeType = getSupportedMimeType()
-          const recorder = new MediaRecorder(
-            streamRef.current,
-            mimeType ? { mimeType } : {},
-          )
-          const chunks = []
-
-          recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) chunks.push(e.data)
-          }
-
-          recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: mimeType || 'video/webm' })
-            const url = URL.createObjectURL(blob)
-            objUrlRef.current = url
-            setPlaybackUrl(url)
-            setPhase('review')
-          }
-
-          recorder.start()
           setPhase('recording')
 
-          setTimeout(() => {
-            if (recorder.state !== 'inactive') recorder.stop()
-          }, RECORD_MS)
+          try {
+            const r = await fetch('/api/judge-record', { method: 'POST' })
+            const data = await r.json()
+            if (!r.ok || !data.ok) {
+              setRecordError(data.error || 'Recording failed.')
+              setPhase('idle')
+              return
+            }
+            setPlaybackUrl(data.videoUrl)
+            setPhase('review')
+          } catch (err) {
+            setRecordError('Could not reach the recording service — ' + (err.message || 'network error'))
+            setPhase('idle')
+          }
         }
 
         function recordAgain() {
           setPhase('idle')
+          setPlaybackUrl(null)
           setIsPlaying(false)
+          setRecordError(null)
           setSendResult(null)
-          // Re-attach stream to preview
-          if (streamRef.current && previewRef.current) {
-            previewRef.current.srcObject = streamRef.current
-          }
         }
 
         // ── Playback controls ─────────────────────────────────────────────────
@@ -404,7 +338,7 @@
           )
         }
 
-        const { laneColors, heat } = wsState
+        const { laneColors, heat, zcamEnabled } = wsState
 
         return (
           <div className="min-h-screen flex flex-col">
@@ -435,10 +369,13 @@
             {/* ── Body ───────────────────────────────────────────────────── */}
             <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 flex flex-col gap-6">
 
-              {/* ── Camera / Video ──────────────────────────────────────── */}
+              {/* ── ZCam / Video ────────────────────────────────────────── */}
               <div>
-                <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3">
-                  {phase === 'review' ? 'Recorded Clip' : 'Camera Preview'}
+                <div className="font-condensed text-xs uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
+                  {phase === 'review' ? 'Recorded Clip' : 'ZCam E2M4'}
+                  {zcamEnabled && phase !== 'review' && (
+                    <span className="font-condensed text-xs text-green-400">● connected</span>
+                  )}
                 </div>
 
                 {/* Video container */}
@@ -446,57 +383,73 @@
                   className="rounded-2xl overflow-hidden border border-white/10 relative"
                   style={{ background: '#000', aspectRatio: '16/9' }}
                 >
-                  {/* Live camera preview */}
-                  <video
-                    ref={previewRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                    style={{ display: phase === 'review' ? 'none' : 'block' }}
-                  />
-
-                  {/* Recorded clip playback */}
+                  {/* Recorded clip playback (shown in review phase) */}
                   <video
                     ref={playbackRef}
                     src={phase === 'review' ? playbackUrl : undefined}
                     playsInline
-                    className="w-full h-full object-cover"
-                    style={{ display: phase === 'review' ? 'block' : 'none' }}
+                    muted
+                    className="w-full h-full object-contain"
+                    style={{ display: phase === 'review' ? 'block' : 'none', background: '#000' }}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
                     onEnded={() => setIsPlaying(false)}
                   />
 
-                  {/* Recording overlay */}
+                  {/* Idle / ZCam not configured placeholder */}
+                  {phase === 'idle' && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                      {zcamEnabled ? (
+                        <>
+                          <div className="text-5xl">🎥</div>
+                          <div className="font-condensed text-sm text-white/40 text-center px-4">
+                            ZCam E2M4 ready
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-5xl opacity-40">🎥</div>
+                          <div className="font-condensed text-sm text-yellow-400/80 text-center px-4">
+                            ZCam not configured
+                          </div>
+                          <div className="font-condensed text-xs text-white/25 text-center px-6">
+                            Set the ZCam IP address in{' '}
+                            <a href="/manage" className="underline text-white/40 hover:text-white/60">Settings</a>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Recording in-progress overlay */}
                   {phase === 'recording' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
                       <div className="flex items-center gap-3">
                         <div className="w-4 h-4 rounded-full bg-red-500 rec-dot" />
                         <span className="font-display text-2xl text-white tracking-widest">
                           RECORDING
                         </span>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Camera unavailable */}
-                  {cameraError && phase !== 'review' && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70">
-                      <div className="text-4xl">📷</div>
-                      <div className="font-condensed text-sm text-red-400 text-center px-4">
-                        {cameraError}
+                      <div className="font-condensed text-xs text-white/40 tracking-widest uppercase">
+                        Capturing via ZCam — please wait…
                       </div>
                     </div>
                   )}
                 </div>
+
+                {/* Recording error */}
+                {recordError && (
+                  <div className="mt-2 py-2 px-4 rounded-xl font-condensed text-sm text-red-400 bg-red-950 border border-red-900">
+                    ✕ {recordError}
+                  </div>
+                )}
 
                 {/* Primary action row */}
                 <div className="mt-3 flex gap-2">
                   {phase === 'idle' && (
                     <button
                       onClick={startRecording}
-                      disabled={!!cameraError}
+                      disabled={!zcamEnabled}
                       className="flex-1 py-3 rounded-xl font-display text-xl tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{
                         background: 'rgba(239,68,68,0.15)',
