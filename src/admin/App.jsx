@@ -116,7 +116,11 @@ function EventSetupTab({ toast }) {
   const [saved, setSaved] = useState(false)
   const [adminCodeInput, setAdminCodeInput] = useState(getAdminCode())
 
-  useEffect(() => { api.get('/api/event').then(setForm).catch(() => {}) }, [])
+  useEffect(() => {
+    let alive = true
+    api.get('/api/event').then((e) => { if (alive) setForm(e) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   if (!form) return <Spinner />
 
@@ -161,9 +165,9 @@ function EventSetupTab({ toast }) {
         </span>
       </div>
 
-      <div className="card space-y-5">
+      <div className="card space-y-6">
         <SectionHeader icon="🏁" title="Event Details" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label className="label">Event Name</label>
             <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Pack 123 Derby 2025" />
@@ -173,7 +177,7 @@ function EventSetupTab({ toast }) {
             <input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label className="label">Schedule Mode</label>
             <select value={form.scheduleMode} onChange={(e) => set('scheduleMode', e.target.value)}>
@@ -192,7 +196,7 @@ function EventSetupTab({ toast }) {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div>
             <label className="label">Lanes Per Heat</label>
             <select value={form.lanesPerHeat} onChange={(e) => set('lanesPerHeat', Number(e.target.value))}>
@@ -214,7 +218,7 @@ function EventSetupTab({ toast }) {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div>
             <label className="label">Tiebreaker</label>
             <select value={form.tiebreakerRule} onChange={(e) => set('tiebreakerRule', e.target.value)}>
@@ -249,9 +253,9 @@ function EventSetupTab({ toast }) {
         </div>
       </div>
 
-      <div className="card space-y-4">
+      <div className="card space-y-5">
         <SectionHeader icon="🔐" title="Access Codes" subtitle="Leave blank to allow open access. Codes are stored on the server." />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label className="label">Admin Code</label>
             <input type="password" placeholder="Set admin code…" value={codes.adminCode}
@@ -266,7 +270,7 @@ function EventSetupTab({ toast }) {
         <button className="btn btn-secondary" onClick={saveCodes}>Update Access Codes</button>
       </div>
 
-      <div className="card space-y-3">
+      <div className="card space-y-4">
         <SectionHeader icon="🖥️" title="Your Browser Admin Code"
           subtitle="Stored in localStorage. Required for admin API calls from this browser." />
         <div className="flex gap-2">
@@ -302,7 +306,19 @@ function RacersTab({ toast }) {
       setDivisions(Array.isArray(d) ? d : [])
     }).finally(() => setLoading(false))
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    Promise.all([
+      api.get('/api/racers').catch(() => []),
+      api.get('/api/divisions').catch(() => []),
+    ]).then(([r, d]) => {
+      if (!alive) return
+      setRacers(Array.isArray(r) ? r : [])
+      setDivisions(Array.isArray(d) ? d : [])
+    }).finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [])
 
   async function addRacer() {
     if (!form.name.trim()) { toast.show('Name is required', 'error'); return }
@@ -368,7 +384,7 @@ function RacersTab({ toast }) {
 
       <div className="card">
         <SectionHeader icon="➕" title="Add Racer" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-5">
           <div><label className="label">Name *</label><input placeholder="Racer name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
           <div><label className="label">Car Name</label><input placeholder="Lightning McQueen" value={form.carName} onChange={(e) => setForm((f) => ({ ...f, carName: e.target.value }))} /></div>
           <div><label className="label">Car #</label><input placeholder="42" value={form.carNumber} onChange={(e) => setForm((f) => ({ ...f, carNumber: e.target.value }))} /></div>
@@ -557,8 +573,14 @@ function DivisionsTab({ toast }) {
   const [editForm, setEditForm] = useState(null)
   const { confirm, dialog } = useConfirm()
 
-  const load = () => api.get('/api/divisions').then((d) => setDivisions(Array.isArray(d) ? d : [])).catch(() => {})
-  useEffect(load, [])
+  function load() {
+    api.get('/api/divisions').then((d) => setDivisions(Array.isArray(d) ? d : [])).catch(() => {})
+  }
+  useEffect(() => {
+    let alive = true
+    api.get('/api/divisions').then((d) => { if (alive) setDivisions(Array.isArray(d) ? d : []) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   async function add() {
     if (!form.name.trim()) { toast.show('Name is required', 'error'); return }
@@ -590,9 +612,9 @@ function DivisionsTab({ toast }) {
       {dialog}
       <PageTitle>Divisions</PageTitle>
 
-      <div className="card space-y-4">
+      <div className="card space-y-5">
         <SectionHeader icon="🏷️" title="Add Division" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div><label className="label">Name *</label><input placeholder="Tigers" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
           <div>
             <label className="label">Color</label>
@@ -673,7 +695,20 @@ function BracketTab({ toast }) {
     setRacers(Array.isArray(r) ? r : [])
     setEvent(e || {})
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let alive = true
+    Promise.all([
+      api.get('/api/bracket').catch(() => null),
+      api.get('/api/racers').catch(() => []),
+      api.get('/api/event').catch(() => ({})),
+    ]).then(([b, r, e]) => {
+      if (!alive) return
+      setBracket(b && Array.isArray(b.rounds) ? b : null)
+      setRacers(Array.isArray(r) ? r : [])
+      setEvent(e || {})
+    })
+    return () => { alive = false }
+  }, [])
 
   const racerMap = Object.fromEntries(racers.map((r) => [r.id, r]))
   const activeRacers = racers.filter((r) => r.active !== false)
@@ -918,7 +953,25 @@ function RaceManagementTab({ toast }) {
       }
     }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let alive = true
+    Promise.all([
+      api.get('/api/bracket').catch(() => null),
+      api.get('/api/racers').catch(() => []),
+    ]).then(([b, r]) => {
+      if (!alive) return
+      const validBracket = b && Array.isArray(b.rounds) ? b : null
+      setBracket(validBracket)
+      setRacers(Array.isArray(r) ? r : [])
+      if (validBracket) {
+        for (const round of validBracket.rounds) {
+          const active = (round.heats || []).find((h) => h.status === 'active')
+          if (active) { setActiveHeatId(active.id); break }
+        }
+      }
+    })
+    return () => { alive = false }
+  }, [])
 
   const racerMap = Object.fromEntries(racers.map((r) => [r.id, r]))
 
@@ -1183,7 +1236,18 @@ function LeaderboardTab({ toast }) {
     setLeaderboard(Array.isArray(lb) ? lb : [])
     setDivisions(Array.isArray(divs) ? divs : [])
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let alive = true
+    Promise.all([
+      api.get('/api/leaderboard').catch(() => []),
+      api.get('/api/divisions').catch(() => []),
+    ]).then(([lb, divs]) => {
+      if (!alive) return
+      setLeaderboard(Array.isArray(lb) ? lb : [])
+      setDivisions(Array.isArray(divs) ? divs : [])
+    })
+    return () => { alive = false }
+  }, [])
 
   const filtered = filterDiv ? leaderboard.filter((e) => e.division === filterDiv) : leaderboard
   const divMap = Object.fromEntries(divisions.map((d) => [d.id, d]))
@@ -1334,10 +1398,13 @@ export default function App() {
   const toast = useToast()
 
   useEffect(() => {
+    let alive = true
     api.get('/api/event').then((e) => {
+      if (!alive) return
       if (e && e.name) setEventName(e.name)
       if (e && e.status) setEventStatus(e.status)
     }).catch(() => {})
+    return () => { alive = false }
   }, [tab])
 
   function renderTab() {
