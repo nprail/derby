@@ -18,7 +18,11 @@ export default defineConfig({
         admin: resolve(__dirname, 'src/admin.html'),
       },
     },
-    // Keep other files in public/ (videos, static assets served by the server)
+    // emptyOutDir is false because public/ also contains public/videos/ — a
+    // runtime directory created by the server for ZCam downloads. Wiping the
+    // entire outDir would delete those recordings. Clean stale build assets
+    // manually by deleting public/assets/ and the three HTML files before
+    // rebuilding if needed (e.g. after renaming a source entry point).
     emptyOutDir: false,
   },
   server: {
