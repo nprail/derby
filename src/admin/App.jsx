@@ -1420,11 +1420,19 @@ export default function App() {
   }
 
   const STATUS_STYLE = {
-    setup:            'bg-white/5 text-white/30 border-white/10',
-    registration:     'bg-blue-900/40 text-blue-300 border-blue-800/60',
-    bracketGenerated: 'bg-orange-900/40 text-orange-300 border-orange-800/60',
-    racing:           'bg-green-900/40 text-green-300 border-green-800/60',
-    complete:         'bg-yellow-900/40 text-yellow-300 border-yellow-800/60',
+    setup:            'bg-white/5 text-white/40 border-white/10',
+    registration:     'bg-blue-500/15 text-blue-300 border-blue-500/30',
+    bracketGenerated: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    racing:           'bg-green-500/15 text-green-300 border-green-500/30',
+    complete:         'bg-yellow-500/15 text-yellow-300 border-yellow-500/30',
+  }
+
+  const STATUS_DOT = {
+    setup: 'bg-white/20',
+    registration: 'bg-blue-400',
+    bracketGenerated: 'bg-orange-400',
+    racing: 'bg-green-400',
+    complete: 'bg-yellow-400',
   }
 
   return (
@@ -1432,43 +1440,61 @@ export default function App() {
       <Toasts toasts={toast.toasts} />
 
       {/* Header */}
-      <header className="border-b border-white/8 px-4 sm:px-6 py-3 flex items-center justify-between flex-shrink-0"
-        style={{ background: 'linear-gradient(to right, #08080f, #0f0f1e)' }}>
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <span className="text-xl sm:text-2xl flex-shrink-0">🏎</span>
-          <div className="min-w-0">
-            <div className="font-display text-xl sm:text-2xl tracking-widest leading-none text-white">DERBY ADMIN</div>
-            {eventName && (
-              <div className="font-condensed text-xs tracking-widest uppercase text-orange-400/60 mt-0.5 truncate">{eventName}</div>
+      <header className="flex-shrink-0 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #08080f 0%, #0e0e20 50%, #130d1e 100%)', borderBottom: '1px solid rgba(249,115,22,0.18)' }}>
+        {/* Checkered accent strip */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5"
+          style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(249,115,22,0.6) 20%, rgba(249,115,22,0.9) 50%, rgba(249,115,22,0.6) 80%, transparent 100%)' }} />
+        {/* Subtle glow */}
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 60% 100% at 50% 0%, rgba(249,115,22,0.06) 0%, transparent 70%)' }} />
+        <div className="relative px-4 sm:px-6 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            {/* Logo */}
+            <div className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-xl sm:text-2xl"
+              style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.25) 0%, rgba(249,115,22,0.10) 100%)', border: '1px solid rgba(249,115,22,0.3)', boxShadow: '0 0 16px rgba(249,115,22,0.15)' }}>
+              🏎
+            </div>
+            <div className="min-w-0">
+              <div className="font-display text-2xl sm:text-3xl tracking-widest leading-none text-white"
+                style={{ background: 'linear-gradient(135deg, #fff 0%, rgba(249,115,22,0.9) 120%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', color: '#fff' }}>
+                DERBY ADMIN
+              </div>
+              {eventName && (
+                <div className="font-condensed text-xs tracking-[0.15em] uppercase text-orange-400/50 mt-0.5 truncate">{eventName}</div>
+              )}
+            </div>
+            {eventStatus && (
+              <span className={`font-condensed text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full border hidden sm:inline-flex items-center gap-1.5 ml-1 flex-shrink-0 ${STATUS_STYLE[eventStatus] || 'bg-white/5 text-white/30 border-white/10'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eventStatus] || 'bg-white/20'}`} />
+                {eventStatus}
+              </span>
             )}
           </div>
-          {eventStatus && (
-            <span className={`font-condensed text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border hidden sm:inline-block ml-1 flex-shrink-0 ${STATUS_STYLE[eventStatus] || 'bg-white/5 text-white/30 border-white/10'}`}>
-              {eventStatus}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <a href="/" className="font-condensed text-xs uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors">Guest</a>
-          <a href="/manage" className="font-condensed text-xs uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors">Track</a>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <a href="/" className="font-condensed text-xs uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5">Guest</a>
+            <a href="/manage" className="font-condensed text-xs uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5">Track</a>
+          </div>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="border-b border-white/5 px-2 flex gap-0 overflow-x-auto flex-shrink-0 scrollbar-hide"
-        style={{ background: '#0a0a16' }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`font-condensed text-xs sm:text-sm uppercase tracking-wider py-3 px-2 sm:px-4 transition-colors whitespace-nowrap flex items-center gap-1 sm:gap-1.5 ${
-              tab === t.id ? 'tab-active' : 'tab-inactive'
-            }`}
-          >
-            <span className="text-sm sm:text-base leading-none">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
+      <div className="flex-shrink-0 overflow-x-auto scrollbar-hide"
+        style={{ background: 'linear-gradient(180deg, #0c0c1a 0%, #0a0a16 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex gap-0 px-2 sm:px-4 min-w-max">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`font-condensed text-xs sm:text-sm uppercase tracking-wider py-3.5 px-3 sm:px-5 transition-all whitespace-nowrap flex items-center gap-1.5 sm:gap-2 relative ${
+                tab === t.id ? 'tab-active' : 'tab-inactive'
+              }`}
+            >
+              <span className={`text-sm sm:text-base leading-none transition-transform ${tab === t.id ? 'scale-110' : ''}`}>{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}

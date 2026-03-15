@@ -19,9 +19,14 @@ body {
 }
 
 /* Admin-specific tab styles */
-.tab-active { border-bottom: 2px solid #f97316; color: #f97316; }
-.tab-inactive { border-bottom: 2px solid transparent; color: rgba(255,255,255,0.4); }
-.tab-inactive:hover { color: rgba(255,255,255,0.7); }
+.tab-active {
+  background: linear-gradient(135deg, rgba(249,115,22,0.18) 0%, rgba(234,88,12,0.10) 100%);
+  color: #f97316;
+  border-bottom: 2px solid #f97316;
+  box-shadow: inset 0 -2px 12px rgba(249,115,22,0.12);
+}
+.tab-inactive { border-bottom: 2px solid transparent; color: rgba(255,255,255,0.38); }
+.tab-inactive:hover { color: rgba(255,255,255,0.72); background: rgba(255,255,255,0.04); }
 
 /* Admin-specific form styles */
 input, select, textarea {
