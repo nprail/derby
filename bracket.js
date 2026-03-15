@@ -38,18 +38,20 @@ function sortBySeed(racers) {
  * Algorithm: fix racers[0], rotate the rest left by one each round.
  * Total rounds = n-1 (even n) or n (odd n, with one null "bye" slot added).
  */
+const BYE = null; // sentinel for a bye slot (no racer assigned)
+
 function buildCircleSchedule(ids, lanesPerHeat) {
-  const L = Math.min(lanesPerHeat, ids.length);
+  const effectiveLanes = Math.min(lanesPerHeat, ids.length);
   let circle = [...ids];
-  if (circle.length % 2 !== 0) circle.push(null); // bye for odd count
+  if (circle.length % 2 !== 0) circle.push(BYE); // add a bye for odd racer count
   const M = circle.length;
   const numRounds = M - 1;
   const schedule = [];
 
   for (let r = 0; r < numRounds; r++) {
     const roundGroups = [];
-    for (let i = 0; i < circle.length; i += L) {
-      const group = circle.slice(i, i + L).filter((id) => id !== null);
+    for (let i = 0; i < circle.length; i += effectiveLanes) {
+      const group = circle.slice(i, i + effectiveLanes).filter((id) => id !== BYE);
       if (group.length >= 2) roundGroups.push(group);
     }
     schedule.push(roundGroups);
@@ -145,26 +147,26 @@ function generateSingleElim(racers, lanesPerHeat) {
   const n = racers.length;
   if (n < 2) return { rounds: [] };
 
-  const L = Math.min(lanesPerHeat, n);
+  const effectiveLanes = Math.min(lanesPerHeat, n);
   const sorted = sortBySeed(racers);
 
-  // Smallest power of L that fits all racers
-  let bracketSize = L;
-  while (bracketSize < n) bracketSize *= L;
-  const numRounds = Math.ceil(Math.log(bracketSize) / Math.log(L));
+  // Smallest power of effectiveLanes that fits all racers
+  let bracketSize = effectiveLanes;
+  while (bracketSize < n) bracketSize *= effectiveLanes;
+  const numRounds = Math.ceil(Math.log(bracketSize) / Math.log(effectiveLanes));
 
   // First-round slots: seed 1, then spread remaining seeds so top seeds meet last
   const slots = interleaveSeeds(
     sorted.map((r) => r.id),
     bracketSize,
-    L,
+    effectiveLanes,
   );
 
   const rounds = [];
   let heatCounter = 1;
 
   for (let r = 0; r < numRounds; r++) {
-    const heatsInRound = Math.floor(bracketSize / Math.pow(L, r + 1));
+    const heatsInRound = Math.floor(bracketSize / Math.pow(effectiveLanes, r + 1));
     const heats = [];
 
     for (let h = 0; h < heatsInRound; h++) {
@@ -172,13 +174,13 @@ function generateSingleElim(racers, lanesPerHeat) {
       let lanes;
 
       if (r === 0) {
-        const start = h * L;
-        lanes = slots.slice(start, start + L).map((id, i) => ({
+        const start = h * effectiveLanes;
+        lanes = slots.slice(start, start + effectiveLanes).map((id, i) => ({
           lane: i + 1,
           racerId: id,
         }));
       } else {
-        lanes = Array.from({ length: L }, (_, i) => ({
+        lanes = Array.from({ length: effectiveLanes }, (_, i) => ({
           lane: i + 1,
           racerId: null,
         }));
@@ -211,7 +213,7 @@ function generateSingleElim(racers, lanesPerHeat) {
  * Seed 1 → slot 0, Seed 2 → last slot, Seed 3 → middle, etc.
  * (Standard "balanced" seeding for single elimination.)
  */
-function interleaveSeeds(ids, bracketSize, L) {
+function interleaveSeeds(ids, bracketSize, lanesPerHeat) {
   const slots = new Array(bracketSize).fill(null);
 
   function place(seedIndex, positions) {
@@ -260,18 +262,18 @@ function generateDoubleElim(racers, lanesPerHeat) {
   const n = racers.length;
   if (n < 2) return { rounds: [] };
 
-  const L = Math.min(lanesPerHeat, n);
+  const effectiveLanes = Math.min(lanesPerHeat, n);
   const sorted = sortBySeed(racers);
 
   // Winners bracket: same as single elim
-  let bracketSize = L;
-  while (bracketSize < n) bracketSize *= L;
-  const wRounds = Math.ceil(Math.log(bracketSize) / Math.log(L));
+  let bracketSize = effectiveLanes;
+  while (bracketSize < n) bracketSize *= effectiveLanes;
+  const wRounds = Math.ceil(Math.log(bracketSize) / Math.log(effectiveLanes));
 
   const slots = interleaveSeeds(
     sorted.map((r) => r.id),
     bracketSize,
-    L,
+    effectiveLanes,
   );
 
   const rounds = [];
@@ -279,19 +281,19 @@ function generateDoubleElim(racers, lanesPerHeat) {
 
   // ── Winners bracket ──────────────────────────────────────────────────────
   for (let r = 0; r < wRounds; r++) {
-    const heatsInRound = Math.floor(bracketSize / Math.pow(L, r + 1));
+    const heatsInRound = Math.floor(bracketSize / Math.pow(effectiveLanes, r + 1));
     const heats = [];
 
     for (let h = 0; h < heatsInRound; h++) {
       let lanes;
       if (r === 0) {
-        const start = h * L;
-        lanes = slots.slice(start, start + L).map((id, i) => ({
+        const start = h * effectiveLanes;
+        lanes = slots.slice(start, start + effectiveLanes).map((id, i) => ({
           lane: i + 1,
           racerId: id,
         }));
       } else {
-        lanes = Array.from({ length: L }, (_, i) => ({
+        lanes = Array.from({ length: effectiveLanes }, (_, i) => ({
           lane: i + 1,
           racerId: null,
         }));
@@ -320,11 +322,11 @@ function generateDoubleElim(racers, lanesPerHeat) {
   // ── Losers bracket ───────────────────────────────────────────────────────
   // Number of losers bracket rounds ≈ 2*(wRounds-1)
   const lRounds = Math.max(1, 2 * (wRounds - 1));
-  const losersPerFirstRound = Math.floor(bracketSize / L); // losers from W round 1
+  const losersPerFirstRound = Math.floor(bracketSize / effectiveLanes); // losers from W round 1
 
   for (let r = 0; r < lRounds; r++) {
     const roundNum = wRounds + r + 1;
-    const heatsInRound = Math.max(1, Math.floor(losersPerFirstRound / Math.pow(L, Math.ceil((r + 1) / 2))));
+    const heatsInRound = Math.max(1, Math.floor(losersPerFirstRound / Math.pow(effectiveLanes, Math.ceil((r + 1) / 2))));
     const heats = [];
 
     for (let h = 0; h < heatsInRound; h++) {
@@ -332,7 +334,7 @@ function generateDoubleElim(racers, lanesPerHeat) {
         id: `heat-L${r + 1}-${h + 1}`,
         round: roundNum,
         number: heatCounter++,
-        lanes: Array.from({ length: L }, (_, i) => ({ lane: i + 1, racerId: null })),
+        lanes: Array.from({ length: effectiveLanes }, (_, i) => ({ lane: i + 1, racerId: null })),
         status: 'pending',
         trackId: null,
         result: null,
@@ -357,7 +359,7 @@ function generateDoubleElim(racers, lanesPerHeat) {
         id: 'heat-GF-1',
         round: wRounds + lRounds + 1,
         number: heatCounter++,
-        lanes: Array.from({ length: Math.min(L, 2) }, (_, i) => ({
+        lanes: Array.from({ length: Math.min(effectiveLanes, 2) }, (_, i) => ({
           lane: i + 1,
           racerId: null,
         })),
