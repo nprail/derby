@@ -1,0 +1,28 @@
+{
+  "name": "Pinewood Derby Server",
+  "description": "Live race timing, bracket management, and leaderboard for Pinewood Derby events.",
+  "repository": "https://github.com/nprail/derby",
+  "keywords": ["node", "express", "websocket", "react", "pinewood-derby"],
+  "env": {
+    "ADMIN_CODE": {
+      "description": "Secret code required to access the admin/track-official UI. Leave blank to disable access control.",
+      "required": false
+    },
+    "TRACK_OFFICIAL_CODE": {
+      "description": "Optional secondary code for track-official role (result entry only). Leave blank to use admin code only.",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "stack": "heroku-24"
+}

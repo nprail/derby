@@ -2,13 +2,15 @@
 /**
  * Pinewood Derby Race Server
  * ==========================
- * Serves two pages:
+ * Serves pages:
  *   GET /          → Guest-facing display page
  *   GET /manage    → Track manager page (reset, configure lane colors)
+ *   GET /admin     → Race Manager admin page
  *
  * WebSocket broadcasts race state to all connected clients in real time.
  * Sensor mode (gpio / esp32 / simulate), ZCam IP, and all other settings
  * are configured via the Track Manager page and persisted in derby_config.json.
+ * Event/racer/bracket data is persisted in derby_event.json.
  *
  * Install:
  *   npm install
@@ -25,19 +27,34 @@ const path = require('path')
 const fs = require('fs')
 const { createSensorManager } = require('./sensor-manager')
 const { createZCamManager } = require('./zcam')
+const {
+  generateRoundRobin,
+  generateSingleElim,
+  generateDoubleElim,
+  generatePoints,
+} = require('./bracket')
+
+const {
+  state,
+  eventState,
+  saveConfig,
+  saveEvent,
+  getActiveRacers,
+  getCurrentHeat,
+  computeLeaderboard,
+  findHeat,
+} = require('./state')
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const DEFAULT_TIMEOUT = 8
 const LOG_FILE = 'derby_results.csv'
-const CONFIG_FILE = 'derby_config.json'
 
 // ── Arg Parsing ───────────────────────────────────────────────────────────────
 
 function parseArgs() {
   const args = process.argv.slice(2)
   const opts = {
-    port: 3000,
+    port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
   }
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port' && args[i + 1])
@@ -46,57 +63,9 @@ function parseArgs() {
   return opts
 }
 
-// ── Race State ────────────────────────────────────────────────────────────────
-
 const opts = parseArgs()
 
-const savedConfig = loadConfig()
-
-let state = {
-  heat: savedConfig.heat ?? 1,
-  status: 'idle', // idle | armed | finished
-  finishOrder: [], // [{ lane, gapMs }]
-  laneColors: savedConfig.laneColors ?? buildDefaultColors(savedConfig.numLanes ?? 4),
-  numLanes: savedConfig.numLanes ?? 4,
-  timeout: savedConfig.timeout ?? DEFAULT_TIMEOUT,
-  history: [], // last 10 heats
-  videoUrl: null, // URL of the latest heat recording, or null
-  videoReplayEnabled: savedConfig.videoReplayEnabled ?? true, // show replay on guest display
-  zcamEnabled: !!(savedConfig.zcamIp), // whether ZCam integration is active
-  zcamIp: savedConfig.zcamIp ?? null, // IP address of the ZCam, or null
-  sensorMode: savedConfig.sensorMode ?? 'simulate', // 'gpio' | 'esp32' | 'simulate'
-}
-
-function buildDefaultColors(n) {
-  const defaults = ['Red', 'Blue', 'Yellow', 'Green']
-  const out = {}
-  for (let i = 1; i <= n; i++) out[i] = defaults[i - 1] ?? `Lane ${i}`
-  return out
-}
-
-function loadConfig() {
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
-    }
-  } catch (e) {
-    console.warn('Could not load config file:', e.message)
-  }
-  return {}
-}
-
-function saveConfig() {
-  const cfg = {
-    heat: state.heat,
-    laneColors: state.laneColors,
-    numLanes: state.numLanes,
-    timeout: state.timeout,
-    videoReplayEnabled: state.videoReplayEnabled,
-    zcamIp: state.zcamIp ?? null,
-    sensorMode: state.sensorMode,
-  }
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
-}
+// ── Logging ───────────────────────────────────────────────────────────────────
 
 function initLog() {
   if (!fs.existsSync(LOG_FILE)) {
@@ -130,11 +99,35 @@ function logResult() {
 let wss
 function broadcast(type, payload = {}) {
   const { _startTime, ...publicState } = state
-  const msg = JSON.stringify({ type, ...payload, state: publicState })
+  const eventSummary = {
+    eventName: eventState.event.name,
+    eventStatus: eventState.event.status,
+    racerCount: getActiveRacers().length,
+    leaderboard: eventState.leaderboard.slice(0, 10),
+    currentHeat: getCurrentHeat(),
+  }
+  const msg = JSON.stringify({
+    type,
+    ...payload,
+    state: publicState,
+    event: eventSummary,
+  })
   if (!wss) return
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) client.send(msg)
   }
+}
+
+// ── Access Control Middleware ─────────────────────────────────────────────────
+
+function requireAdmin(req, res, next) {
+  if (!eventState.adminCode) return next() // no code set → open access
+  const provided =
+    req.headers['x-admin-code'] ||
+    (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
+  if (provided !== eventState.adminCode)
+    return res.status(403).json({ error: 'Admin code required' })
+  next()
 }
 
 // ── ZCam ──────────────────────────────────────────────────────────────────────
@@ -216,116 +209,76 @@ function initSensorManager() {
   sensorManager.setup()
 }
 
+function getSensorManager() {
+  return sensorManager
+}
+
 // ── Express + WS ──────────────────────────────────────────────────────────────
 
 const app = express()
 app.use(express.json())
 
+app.get('/api/state', (req, res) => res.json(state))
+
+// ── Route modules ─────────────────────────────────────────────────────────────
+
+const routeDeps = {
+  state,
+  eventState,
+  broadcast,
+  requireAdmin,
+  saveConfig,
+  saveEvent,
+  getActiveRacers,
+  getCurrentHeat,
+  computeLeaderboard,
+  findHeat,
+  getSensorManager,
+  initZCam,
+  initSensorManager,
+  generateRoundRobin,
+  generateSingleElim,
+  generateDoubleElim,
+  generatePoints,
+}
+
+app.use('/api', require('./routes/sensor')(routeDeps))
+app.use('/api', require('./routes/event')(routeDeps))
+app.use('/api', require('./routes/racers')(routeDeps))
+app.use('/api', require('./routes/divisions')(routeDeps))
+app.use('/api', require('./routes/bracket')(routeDeps))
+app.use('/api', require('./routes/heats')(routeDeps))
+app.use('/api', require('./routes/leaderboard')(routeDeps))
+app.use('/api', require('./routes/access')(routeDeps))
+
+// Static file serving after API routes to avoid unnecessary filesystem checks on API calls
+app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
 app.get('/', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'guest.html')),
 )
 app.get('/manage', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'manage.html')),
 )
-app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
+app.get('/admin', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'admin.html')),
+)
+app.use(express.static(path.join(__dirname, 'public')))
 
-app.get('/api/state', (req, res) => res.json(state))
-
-app.post('/api/arm', (req, res) => {
-  if (state.status === 'armed')
-    return res.status(400).json({ error: 'Already armed' })
-  sensorManager.arm()
-  res.json({ ok: true })
-})
-
-app.post('/api/reset', (req, res) => {
-  state.videoUrl = null
-  sensorManager.reset()
-  res.json({ ok: true })
-})
-
-// Called by the ESP32 sensor node on every finish-line trigger.
-// { lane: number, timestamp_us: string }  — timestamp_us is the raw
-// esp_timer_get_time() value sent as a string to preserve 64-bit precision.
-// The server computes gapMs from the difference between trigger timestamps,
-// so WiFi latency has no effect on race results.
-app.post('/api/trigger', (req, res) => {
-  const { lane, timestamp_us } = req.body
-  if (state.status !== 'armed')
-    return res.json({ ok: true, ignored: true, reason: 'Not armed' })
-  const laneNum = parseInt(lane)
-  if (!laneNum || laneNum < 1 || laneNum > state.numLanes)
-    return res.status(400).json({ error: 'Invalid lane' })
-  const tsUs = timestamp_us !== undefined ? BigInt(timestamp_us) : null
-  sensorManager.triggerLane(laneNum, tsUs)
-  res.json({ ok: true })
-})
-
-app.post('/api/clear-display', (req, res) => {
-  state.videoUrl = null
-  broadcast('clear')
-  res.json({ ok: true })
-})
-
-app.post('/api/reset-race', (req, res) => {
-  state.videoUrl = null
-  sensorManager.reset()
-  state.heat = 1
-  state.history = []
-  saveConfig()
-  broadcast('reset')
-  res.json({ ok: true })
-})
-
-app.post('/api/settings', (req, res) => {
-  const { colors, videoReplayEnabled, numLanes, timeout, zcamIp, sensorMode } = req.body
-
-  if (state.status === 'armed' && (numLanes !== undefined || sensorMode !== undefined)) {
-    return res.status(400).json({ error: 'Cannot change lane count or sensor mode while armed' })
-  }
-  if (colors !== undefined) {
-    if (typeof colors !== 'object' || colors === null)
-      return res.status(400).json({ error: 'colors must be an object' })
-    state.laneColors = { ...state.laneColors, ...colors }
-  }
-  if (videoReplayEnabled !== undefined) {
-    if (typeof videoReplayEnabled !== 'boolean')
-      return res.status(400).json({ error: 'videoReplayEnabled must be a boolean' })
-    state.videoReplayEnabled = videoReplayEnabled
-  }
-  if (numLanes !== undefined) {
-    if (!Number.isInteger(numLanes) || numLanes < 1 || numLanes > 8)
-      return res.status(400).json({ error: 'numLanes must be an integer between 1 and 8' })
-    state.numLanes = numLanes
-  }
-  if (timeout !== undefined) {
-    if (typeof timeout !== 'number' || timeout <= 0)
-      return res.status(400).json({ error: 'timeout must be a positive number' })
-    state.timeout = timeout
-  }
-  if (zcamIp !== undefined) {
-    if (zcamIp !== null && typeof zcamIp !== 'string')
-      return res.status(400).json({ error: 'zcamIp must be a string or null' })
-    initZCam(zcamIp || null)
-  }
-  if (sensorMode !== undefined) {
-    if (!['gpio', 'esp32', 'simulate'].includes(sensorMode))
-      return res.status(400).json({ error: 'sensorMode must be gpio, esp32, or simulate' })
-    state.sensorMode = sensorMode
-  }
-
-  saveConfig()
-  if (sensorMode !== undefined) initSensorManager()
-  broadcast('settings')
-  res.json({ ok: true })
-})
+// ── WebSocket Server ──────────────────────────────────────────────────────────
 
 const server = http.createServer(app)
 wss = new WebSocket.Server({ server })
 
 wss.on('connection', (ws) => {
   const { _startTime, ...publicState } = state
-  ws.send(JSON.stringify({ type: 'init', state: publicState }))
+  const eventSummary = {
+    eventName: eventState.event.name,
+    eventStatus: eventState.event.status,
+    racerCount: getActiveRacers().length,
+    leaderboard: eventState.leaderboard.slice(0, 10),
+    currentHeat: getCurrentHeat(),
+  }
+  ws.send(JSON.stringify({ type: 'init', state: publicState, event: eventSummary }))
 })
 
 initLog()
@@ -341,6 +294,7 @@ server.listen(opts.port, () => {
   console.log(`\n🏎  Pinewood Derby Server running`)
   console.log(`   Guest display : http://localhost:${opts.port}/`)
   console.log(`   Track manager : http://localhost:${opts.port}/manage`)
+  console.log(`   Race admin    : http://localhost:${opts.port}/admin`)
   console.log(`   Mode          : ${sensorModeLabel}`)
   if (state.zcamIp) {
     console.log(`   ZCam E2M4     : http://${state.zcamIp}`)
