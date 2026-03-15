@@ -22,7 +22,7 @@ A real-time race timing and display system for Pinewood Derby events. An ESP32 s
 
 | Dependency | Version |
 |---|---|
-| Node.js | ≥ 18 |
+| Node.js | 22.x |
 | express | ^4.18 |
 | ws | ^8 |
 | axios | ^1 *(ZCam HTTP API)* |
