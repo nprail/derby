@@ -218,18 +218,6 @@ function getSensorManager() {
 const app = express()
 app.use(express.json())
 
-app.use(express.static(path.join(__dirname, 'public')))
-app.get('/', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'guest.html')),
-)
-app.get('/manage', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'manage.html')),
-)
-app.get('/admin', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'admin.html')),
-)
-app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
-
 app.get('/api/state', (req, res) => res.json(state))
 
 // ── Route modules ─────────────────────────────────────────────────────────────
@@ -262,6 +250,19 @@ app.use('/api', require('./routes/bracket')(routeDeps))
 app.use('/api', require('./routes/heats')(routeDeps))
 app.use('/api', require('./routes/leaderboard')(routeDeps))
 app.use('/api', require('./routes/access')(routeDeps))
+
+// Static file serving after API routes to avoid unnecessary filesystem checks on API calls
+app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
+app.get('/', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'guest.html')),
+)
+app.get('/manage', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'manage.html')),
+)
+app.get('/admin', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'admin.html')),
+)
+app.use(express.static(path.join(__dirname, 'public')))
 
 // ── WebSocket Server ──────────────────────────────────────────────────────────
 

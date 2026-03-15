@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
+const backendPort = process.env.BACKEND_PORT || 3000
+const backendOrigin = `http://localhost:${backendPort}`
+
 export default defineConfig({
   root: 'src',
   plugins: [react(), tailwindcss()],
@@ -20,9 +23,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/ws': { target: 'ws://localhost:3000', ws: true },
-      '/videos': 'http://localhost:3000',
+      '/api': backendOrigin,
+      '/ws': { target: `ws://localhost:${backendPort}`, ws: true },
+      '/videos': backendOrigin,
     },
   },
 })

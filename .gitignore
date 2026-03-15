@@ -7,5 +7,11 @@ public/assets/
 # Dependencies
 node_modules/
 
+# Runtime-generated files
+derby_config.json
+derby_event.json
+derby_results.csv
+public/videos/
+
 # Misc
 .DS_Store
