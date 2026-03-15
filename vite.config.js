@@ -15,6 +15,7 @@ export default defineConfig({
         admin: resolve(__dirname, 'src/admin.html'),
       },
     },
+    // Keep other files in public/ (videos, static assets served by the server)
     emptyOutDir: false,
   },
   server: {

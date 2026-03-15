@@ -218,6 +218,7 @@ function getSensorManager() {
 const app = express()
 app.use(express.json())
 
+app.use(express.static(path.join(__dirname, 'public')))
 app.get('/', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'guest.html')),
 )
@@ -227,7 +228,6 @@ app.get('/manage', (req, res) =>
 app.get('/admin', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'admin.html')),
 )
-app.use(express.static(path.join(__dirname, 'public')))
 app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')))
 
 app.get('/api/state', (req, res) => res.json(state))
