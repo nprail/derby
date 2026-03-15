@@ -403,7 +403,8 @@ export default function App() {
 
   useEffect(() => {
     function connect() {
-      const ws = new WebSocket(`ws://${location.host}`)
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const ws = new WebSocket(`${wsProtocol}//${location.host}`)
       wsRef.current = ws
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data)
