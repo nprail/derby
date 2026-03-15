@@ -41,7 +41,42 @@ A real-time race timing and display system for Pinewood Derby events. An ESP32 s
 git clone https://github.com/nprail/derby.git
 cd derby
 npm install
+npm run build   # compile React pages (Vite → public/)
 ```
+
+---
+
+## Heroku Deployment
+
+The server is ready to deploy to Heroku with a single push.
+
+```bash
+heroku create my-derby-app
+git push heroku main
+```
+
+Heroku will automatically:
+1. Run `npm install` (installs all dependencies; `pigpio` is optional and skipped on non-Pi hosts)
+2. Run `npm run build` via the `heroku-postbuild` hook (compiles the Vite/React pages to `public/`)
+3. Start the server with `node server.js` via the `Procfile`
+
+The `PORT` environment variable is automatically set by Heroku and read by the server.
+
+### Heroku Config Vars
+
+Set these in the Heroku dashboard (**Settings → Config Vars**) or via CLI:
+
+```bash
+heroku config:set ADMIN_CODE=your-secret-admin-password
+heroku config:set TRACK_OFFICIAL_CODE=your-official-password
+```
+
+| Config Var | Description |
+|---|---|
+| `ADMIN_CODE` | Protects the admin UI and all write APIs. Leave unset for open access. |
+| `TRACK_OFFICIAL_CODE` | Secondary role: can enter heat results but not change event setup. |
+
+> **Note:** Heroku's filesystem is ephemeral — `derby_config.json`, `derby_event.json`, and `derby_results.csv` are created fresh each dyno restart. For persistent storage in production, a database add-on would be needed (not yet implemented).
 
 ---
 

@@ -54,7 +54,7 @@ const LOG_FILE = 'derby_results.csv'
 function parseArgs() {
   const args = process.argv.slice(2)
   const opts = {
-    port: 3000,
+    port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
   }
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port' && args[i + 1])

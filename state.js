@@ -78,8 +78,9 @@ const eventState = {
   heatQueue: savedEvent.heatQueue || [],
   heatResults: savedEvent.heatResults || {},
   leaderboard: savedEvent.leaderboard || [],
-  adminCode: savedEvent.adminCode || null,
-  trackOfficialCode: savedEvent.trackOfficialCode || null,
+  // Env vars take precedence over persisted codes so Heroku config vars work
+  adminCode: process.env.ADMIN_CODE || savedEvent.adminCode || null,
+  trackOfficialCode: process.env.TRACK_OFFICIAL_CODE || savedEvent.trackOfficialCode || null,
 }
 
 function saveConfig() {
