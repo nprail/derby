@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: #0a0a0f;
+  color: #f0f0f0;
+  font-family: 'Barlow', sans-serif;
+  min-height: 100vh;
+}
+.font-display {
+  font-family: 'Teko', sans-serif;
+}
+.font-condensed {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+/* Admin-specific tab styles */
+.tab-active { border-bottom: 2px solid #f97316; color: #f97316; }
+.tab-inactive { border-bottom: 2px solid transparent; color: rgba(255,255,255,0.4); }
+.tab-inactive:hover { color: rgba(255,255,255,0.7); }
+
+/* Admin-specific form styles */
+input, select, textarea {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #f0f0f0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus, select:focus, textarea:focus { border-color: #f97316; }
+input[type=checkbox] { width: auto; }
+
+/* Admin button styles */
+.btn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:hover:not(:disabled) { opacity: 0.85; }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-primary { background: #f97316; color: #fff; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-secondary { background: rgba(255,255,255,0.08); color: #f0f0f0; border: 1px solid rgba(255,255,255,0.12); }
+.btn-success { background: #16a34a; color: #fff; }
+
+/* Admin card/label styles */
+.card { background: #12121c; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 20px; }
+.label { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 5px; display: block; }
+.heat-card { background: #12121c; border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px 14px; transition: border-color 0.2s; }
+.heat-card.pending { border-left: 3px solid rgba(255,255,255,0.15); }
+.heat-card.active { border-left: 3px solid #22c55e; }
+.heat-card.completed { border-left: 3px solid #f97316; }
+.heat-card.skipped { border-left: 3px solid rgba(255,255,255,0.08); opacity: 0.4; }
+.heat-card.selected { border-color: #f97316 !important; }
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes checkered-scroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 40px 0;
+  }
+}
+@keyframes flash-gold {
+  0%,
+  100% {
+    background: #1a1a2e;
+  }
+  50% {
+    background: #2a2000;
+  }
+}
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes winner-pop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes scanline {
+  0% {
+    top: -10%;
+  }
+  100% {
+    top: 110%;
+  }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.slide-in {
+  animation: slideIn 0.4s ease both;
+}
+.winner-pop {
+  animation: winner-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.checkered-bar {
+  background-image: repeating-linear-gradient(
+    90deg,
+    #fff 0px,
+    #fff 20px,
+    #000 20px,
+    #000 40px
+  );
+  animation: checkered-scroll 1s linear infinite;
+}
+
+.lane-card {
+  transition: all 0.3s ease;
+}
+.armed-pulse {
+  animation: pulse-ring 1.2s ease-out infinite;
+}
+
+.scanline-overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(
+    transparent,
+    rgba(255, 255, 255, 0.03),
+    transparent
+  );
+  animation: scanline 4s linear infinite;
+  pointer-events: none;
+}
+
+.track-stripe {
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 18px,
+    rgba(255, 255, 255, 0.03) 18px,
+    rgba(255, 255, 255, 0.03) 20px
+  );
+}
