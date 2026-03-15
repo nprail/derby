@@ -437,8 +437,69 @@
         )
       }
 
+      function HeatStagingPanel({ currentHeat }) {
+        if (!currentHeat) return null
+        const { lanes = [] } = currentHeat
+        const racerLanes = lanes.filter((l) => l.racerId)
+        if (racerLanes.length === 0) return null
+        return (
+          <div className="border-b border-white/5 bg-black/30 px-4 py-3">
+            <div className="max-w-2xl mx-auto">
+              <div className="font-condensed text-xs uppercase tracking-widest text-white/25 mb-2">
+                Next Up — Heat #{currentHeat.number}
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {racerLanes.map((l) => (
+                  <div
+                    key={l.lane}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/3"
+                  >
+                    <span className="font-condensed text-xs text-white/30">L{l.lane}</span>
+                    <span className="font-condensed text-sm font-semibold">
+                      {l.racerName || l.racerId}
+                    </span>
+                    {l.carNumber && (
+                      <span className="font-condensed text-xs text-white/40">#{l.carNumber}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      function LeaderboardPanel({ leaderboard }) {
+        if (!leaderboard || leaderboard.length === 0) return null
+        return (
+          <div className="border-t border-white/5 bg-black/20 px-4 py-4">
+            <div className="max-w-2xl mx-auto">
+              <div className="font-condensed text-xs uppercase tracking-widest text-white/25 mb-3">
+                Standings
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {leaderboard.slice(0, 8).map((entry) => (
+                  <div key={entry.racerId} className="flex items-center gap-3">
+                    <span className="font-display text-xl w-10 text-right leading-none text-white/40">
+                      {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
+                    </span>
+                    <span className="font-condensed text-xs text-white/30 w-6">{entry.carNumber}</span>
+                    <span className="flex-1 font-condensed text-sm font-semibold truncate">{entry.name}</span>
+                    {entry.bestTime != null && (
+                      <span className="font-condensed text-xs text-green-400">{entry.bestTime.toFixed(3)}s</span>
+                    )}
+                    <span className="font-display text-lg text-orange-400 w-8 text-right leading-none">{entry.points}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
       function App() {
         const [state, setState] = useState(null)
+        const [eventData, setEventData] = useState(null)
         const [isNew, setIsNew] = useState(false)
         const [showVideo, setShowVideo] = useState(false)
         const [activeVideoUrl, setActiveVideoUrl] = useState(null)
@@ -477,6 +538,7 @@
             ws.onmessage = (e) => {
               const msg = JSON.parse(e.data)
               setState(msg.state)
+              if (msg.event) setEventData(msg.event)
               if (msg.type === 'finished') {
                 setIsNew(true)
                 setDisplayCleared(false)
@@ -536,7 +598,7 @@
             <header className="relative border-b border-white/10 bg-black/40 backdrop-blur px-6 py-4 flex items-center justify-between">
               <div>
                 <div className="font-display text-4xl tracking-widest leading-none text-white">
-                  PINEWOOD DERBY
+                  {eventData?.eventName || 'PINEWOOD DERBY'}
                 </div>
                 <div className="font-condensed text-xs tracking-widest uppercase text-white/30 mt-0.5">
                   Live Results Display
@@ -551,6 +613,11 @@
                 </div>
               </div>
             </header>
+
+            {/* Heat staging — shown when a heat is pending/active in the bracket */}
+            {eventData?.currentHeat && (
+              <HeatStagingPanel currentHeat={eventData.currentHeat} />
+            )}
 
             {/* Main results */}
             <main className="flex-1 px-4 py-6 max-w-2xl mx-auto w-full">
@@ -577,6 +644,11 @@
                 videoUrl={activeVideoUrl}
                 onEnded={() => setShowVideo(false)}
               />
+            )}
+
+            {/* Leaderboard */}
+            {eventData?.leaderboard?.length > 0 && (
+              <LeaderboardPanel leaderboard={eventData.leaderboard} />
             )}
 
             {/* History */}
