@@ -153,7 +153,7 @@ function EventSetupTab({ toast }) {
   }
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
         <PageTitle>Event Setup</PageTitle>
         <span className={`font-condensed text-xs uppercase tracking-widest px-3 py-1 rounded-full border mb-5 ${STATUS_STYLE[form.status] || 'bg-white/5 text-white/30 border-white/10'}`}>
@@ -163,7 +163,7 @@ function EventSetupTab({ toast }) {
 
       <div className="card space-y-5">
         <SectionHeader icon="🏁" title="Event Details" />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Event Name</label>
             <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Pack 123 Derby 2025" />
@@ -173,7 +173,7 @@ function EventSetupTab({ toast }) {
             <input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Schedule Mode</label>
             <select value={form.scheduleMode} onChange={(e) => set('scheduleMode', e.target.value)}>
@@ -192,7 +192,7 @@ function EventSetupTab({ toast }) {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="label">Lanes Per Heat</label>
             <select value={form.lanesPerHeat} onChange={(e) => set('lanesPerHeat', Number(e.target.value))}>
@@ -214,7 +214,7 @@ function EventSetupTab({ toast }) {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="label">Tiebreaker</label>
             <select value={form.tiebreakerRule} onChange={(e) => set('tiebreakerRule', e.target.value)}>
@@ -251,7 +251,7 @@ function EventSetupTab({ toast }) {
 
       <div className="card space-y-4">
         <SectionHeader icon="🔐" title="Access Codes" subtitle="Leave blank to allow open access. Codes are stored on the server." />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Admin Code</label>
             <input type="password" placeholder="Set admin code…" value={codes.adminCode}
@@ -289,13 +289,20 @@ function RacersTab({ toast }) {
   const [editId, setEditId] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
   const { confirm, dialog } = useConfirm()
 
-  const load = () => {
-    api.get('/api/racers').then((r) => setRacers(Array.isArray(r) ? r : [])).catch(() => {})
-    api.get('/api/divisions').then((d) => setDivisions(Array.isArray(d) ? d : [])).catch(() => {})
+  function load() {
+    setLoading(true)
+    Promise.all([
+      api.get('/api/racers').catch(() => []),
+      api.get('/api/divisions').catch(() => []),
+    ]).then(([r, d]) => {
+      setRacers(Array.isArray(r) ? r : [])
+      setDivisions(Array.isArray(d) ? d : [])
+    }).finally(() => setLoading(false))
   }
-  useEffect(load, [])
+  useEffect(() => { load() }, [])
 
   async function addRacer() {
     if (!form.name.trim()) { toast.show('Name is required', 'error'); return }
@@ -345,7 +352,7 @@ function RacersTab({ toast }) {
   const activeCount = racers.filter((r) => r.active !== false).length
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {dialog}
       <div className="flex items-center gap-3 flex-wrap">
         <PageTitle>Racers</PageTitle>
@@ -361,7 +368,7 @@ function RacersTab({ toast }) {
 
       <div className="card">
         <SectionHeader icon="➕" title="Add Racer" />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
           <div><label className="label">Name *</label><input placeholder="Racer name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
           <div><label className="label">Car Name</label><input placeholder="Lightning McQueen" value={form.carName} onChange={(e) => setForm((f) => ({ ...f, carName: e.target.value }))} /></div>
           <div><label className="label">Car #</label><input placeholder="42" value={form.carNumber} onChange={(e) => setForm((f) => ({ ...f, carNumber: e.target.value }))} /></div>
@@ -390,86 +397,150 @@ function RacersTab({ toast }) {
             {filtered.length} racer{filtered.length !== 1 ? 's' : ''}
           </span>
         </div>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <Spinner />
+        ) : filtered.length === 0 ? (
           <EmptyState icon="👥" title={racers.length === 0 ? 'No racers yet' : 'No match'}
             subtitle={racers.length === 0 ? 'Add some racers above to get started.' : 'Try a different search.'} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/5">
-                  {['Car #', 'Name', 'Car Name', 'Division', 'Seed', 'Status', 'Actions'].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left font-condensed text-xs uppercase tracking-wider text-white/25">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => {
-                  const div = divMap[r.division]
-                  if (editId === r.id) {
+          <>
+            {/* Mobile card list */}
+            <div className="md:hidden divide-y divide-white/5">
+              {filtered.map((r) => {
+                const div = divMap[r.division]
+                if (editId === r.id) {
+                  return (
+                    <div key={r.id} className="px-4 py-3 bg-white/5 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><label className="label">Car #</label><input value={editForm.carNumber} onChange={(e) => setEditForm((f) => ({ ...f, carNumber: e.target.value }))} /></div>
+                        <div><label className="label">Name</label><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div>
+                        <div><label className="label">Car Name</label><input value={editForm.carName} onChange={(e) => setEditForm((f) => ({ ...f, carName: e.target.value }))} /></div>
+                        <div><label className="label">Seed</label><input type="number" value={editForm.seed} onChange={(e) => setEditForm((f) => ({ ...f, seed: e.target.value }))} /></div>
+                      </div>
+                      <select value={editForm.division} onChange={(e) => setEditForm((f) => ({ ...f, division: e.target.value }))}>
+                        <option value="">— None —</option>
+                        {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                      <div className="flex gap-2 pt-1">
+                        <button className="btn btn-success" onClick={() => saveEdit(r.id)}>Save</button>
+                        <button className="btn btn-secondary" onClick={() => setEditId(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div key={r.id} className={`px-4 py-3 flex items-center gap-3 ${!r.active ? 'opacity-40' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        {r.carNumber && (
+                          <span className="font-display text-sm bg-orange-500/10 border border-orange-500/25 text-orange-400 px-1.5 py-0 rounded">#{r.carNumber}</span>
+                        )}
+                        <span className="font-semibold text-sm truncate">{r.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-white/40">
+                        {r.carName && <span>{r.carName}</span>}
+                        {div && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full" style={{ background: div.color }} />
+                            {div.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        className={`font-condensed text-xs px-2 py-1 rounded-full border ${
+                          r.active !== false ? 'border-green-700 text-green-400' : 'border-white/10 text-white/30'
+                        }`}
+                        onClick={() => toggleActive(r)}
+                      >
+                        {r.active !== false ? '●' : '○'}
+                      </button>
+                      <button className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '11px' }} onClick={() => startEdit(r)}>Edit</button>
+                      <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: '11px' }} onClick={() => deleteRacer(r.id)}>✕</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    {['Car #', 'Name', 'Car Name', 'Division', 'Seed', 'Status', 'Actions'].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left font-condensed text-xs uppercase tracking-wider text-white/25">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => {
+                    const div = divMap[r.division]
+                    if (editId === r.id) {
+                      return (
+                        <tr key={r.id} className="border-b border-white/5 bg-white/5">
+                          <td className="px-2 py-1.5"><input value={editForm.carNumber} onChange={(e) => setEditForm((f) => ({ ...f, carNumber: e.target.value }))} /></td>
+                          <td className="px-2 py-1.5"><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></td>
+                          <td className="px-2 py-1.5"><input value={editForm.carName} onChange={(e) => setEditForm((f) => ({ ...f, carName: e.target.value }))} /></td>
+                          <td className="px-2 py-1.5">
+                            <select value={editForm.division} onChange={(e) => setEditForm((f) => ({ ...f, division: e.target.value }))}>
+                              <option value="">—</option>
+                              {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-2 py-1.5"><input type="number" value={editForm.seed} onChange={(e) => setEditForm((f) => ({ ...f, seed: e.target.value }))} /></td>
+                          <td className="px-2 py-1.5" colSpan={2}>
+                            <div className="flex gap-2">
+                              <button className="btn btn-success" onClick={() => saveEdit(r.id)}>Save</button>
+                              <button className="btn btn-secondary" onClick={() => setEditId(null)}>Cancel</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    }
                     return (
-                      <tr key={r.id} className="border-b border-white/5 bg-white/5">
-                        <td className="px-2 py-1.5"><input value={editForm.carNumber} onChange={(e) => setEditForm((f) => ({ ...f, carNumber: e.target.value }))} /></td>
-                        <td className="px-2 py-1.5"><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></td>
-                        <td className="px-2 py-1.5"><input value={editForm.carName} onChange={(e) => setEditForm((f) => ({ ...f, carName: e.target.value }))} /></td>
-                        <td className="px-2 py-1.5">
-                          <select value={editForm.division} onChange={(e) => setEditForm((f) => ({ ...f, division: e.target.value }))}>
-                            <option value="">—</option>
-                            {divisions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                          </select>
+                      <tr key={r.id} className={`border-b border-white/5 hover:bg-white/3 transition-colors ${!r.active ? 'opacity-40' : ''}`}>
+                        <td className="px-4 py-3">
+                          {r.carNumber
+                            ? <span className="font-display text-base bg-orange-500/10 border border-orange-500/25 text-orange-400 px-2 py-0.5 rounded-md">#{r.carNumber}</span>
+                            : <span className="text-white/20">—</span>}
                         </td>
-                        <td className="px-2 py-1.5"><input type="number" value={editForm.seed} onChange={(e) => setEditForm((f) => ({ ...f, seed: e.target.value }))} /></td>
-                        <td className="px-2 py-1.5" colSpan={2}>
-                          <div className="flex gap-2">
-                            <button className="btn btn-success" onClick={() => saveEdit(r.id)}>Save</button>
-                            <button className="btn btn-secondary" onClick={() => setEditId(null)}>Cancel</button>
+                        <td className="px-4 py-3 font-semibold">{r.name}</td>
+                        <td className="px-4 py-3 text-white/50">{r.carName || '—'}</td>
+                        <td className="px-4 py-3">
+                          {div
+                            ? <span className="inline-flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: div.color }} />
+                                <span className="font-condensed text-xs">{div.name}</span>
+                              </span>
+                            : <span className="text-white/20">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-white/40 font-condensed">{r.seed ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            className={`font-condensed text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              r.active !== false
+                                ? 'border-green-700 text-green-400 hover:bg-green-900/20'
+                                : 'border-white/10 text-white/30 hover:bg-white/5'
+                            }`}
+                            onClick={() => toggleActive(r)}
+                          >
+                            {r.active !== false ? '● Active' : '○ Withdrawn'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1.5">
+                            <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: '12px' }} onClick={() => startEdit(r)}>Edit</button>
+                            <button className="btn btn-danger" style={{ padding: '3px 10px', fontSize: '12px' }} onClick={() => deleteRacer(r.id)}>✕</button>
                           </div>
                         </td>
                       </tr>
                     )
-                  }
-                  return (
-                    <tr key={r.id} className={`border-b border-white/5 hover:bg-white/3 transition-colors ${!r.active ? 'opacity-40' : ''}`}>
-                      <td className="px-4 py-3">
-                        {r.carNumber
-                          ? <span className="font-display text-base bg-orange-500/10 border border-orange-500/25 text-orange-400 px-2 py-0.5 rounded-md">#{r.carNumber}</span>
-                          : <span className="text-white/20">—</span>}
-                      </td>
-                      <td className="px-4 py-3 font-semibold">{r.name}</td>
-                      <td className="px-4 py-3 text-white/50">{r.carName || '—'}</td>
-                      <td className="px-4 py-3">
-                        {div
-                          ? <span className="inline-flex items-center gap-1.5">
-                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: div.color }} />
-                              <span className="font-condensed text-xs">{div.name}</span>
-                            </span>
-                          : <span className="text-white/20">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-white/40 font-condensed">{r.seed ?? '—'}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          className={`font-condensed text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                            r.active !== false
-                              ? 'border-green-700 text-green-400 hover:bg-green-900/20'
-                              : 'border-white/10 text-white/30 hover:bg-white/5'
-                          }`}
-                          onClick={() => toggleActive(r)}
-                        >
-                          {r.active !== false ? '● Active' : '○ Withdrawn'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <button className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: '12px' }} onClick={() => startEdit(r)}>Edit</button>
-                          <button className="btn btn-danger" style={{ padding: '3px 10px', fontSize: '12px' }} onClick={() => deleteRacer(r.id)}>✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -515,13 +586,13 @@ function DivisionsTab({ toast }) {
   }
 
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="max-w-xl space-y-6">
       {dialog}
       <PageTitle>Divisions</PageTitle>
 
       <div className="card space-y-4">
         <SectionHeader icon="🏷️" title="Add Division" />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div><label className="label">Name *</label><input placeholder="Tigers" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
           <div>
             <label className="label">Color</label>
@@ -669,7 +740,7 @@ function BracketTab({ toast }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {dialog}
 
       {/* Controls bar */}
@@ -1126,7 +1197,7 @@ function LeaderboardTab({ toast }) {
   ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <PageTitle>Leaderboard</PageTitle>
         <div className="flex gap-2 flex-wrap mb-5">
@@ -1294,47 +1365,47 @@ export default function App() {
       <Toasts toasts={toast.toasts} />
 
       {/* Header */}
-      <header className="border-b border-white/8 px-6 py-3 flex items-center justify-between flex-shrink-0"
+      <header className="border-b border-white/8 px-4 sm:px-6 py-3 flex items-center justify-between flex-shrink-0"
         style={{ background: 'linear-gradient(to right, #08080f, #0f0f1e)' }}>
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🏎</span>
-          <div>
-            <div className="font-display text-2xl tracking-widest leading-none text-white">DERBY ADMIN</div>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <span className="text-xl sm:text-2xl flex-shrink-0">🏎</span>
+          <div className="min-w-0">
+            <div className="font-display text-xl sm:text-2xl tracking-widest leading-none text-white">DERBY ADMIN</div>
             {eventName && (
-              <div className="font-condensed text-xs tracking-widest uppercase text-orange-400/60 mt-0.5">{eventName}</div>
+              <div className="font-condensed text-xs tracking-widest uppercase text-orange-400/60 mt-0.5 truncate">{eventName}</div>
             )}
           </div>
           {eventStatus && (
-            <span className={`font-condensed text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full border hidden sm:inline-block ml-2 ${STATUS_STYLE[eventStatus] || 'bg-white/5 text-white/30 border-white/10'}`}>
+            <span className={`font-condensed text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border hidden sm:inline-block ml-1 flex-shrink-0 ${STATUS_STYLE[eventStatus] || 'bg-white/5 text-white/30 border-white/10'}`}>
               {eventStatus}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <a href="/" className="font-condensed text-xs uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors">Guest</a>
           <a href="/manage" className="font-condensed text-xs uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors">Track</a>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="border-b border-white/5 px-4 flex gap-0 overflow-x-auto flex-shrink-0"
+      <div className="border-b border-white/5 px-2 flex gap-0 overflow-x-auto flex-shrink-0 scrollbar-hide"
         style={{ background: '#0a0a16' }}>
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`font-condensed text-sm uppercase tracking-wider py-3 px-4 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+            className={`font-condensed text-xs sm:text-sm uppercase tracking-wider py-3 px-2 sm:px-4 transition-colors whitespace-nowrap flex items-center gap-1 sm:gap-1.5 ${
               tab === t.id ? 'tab-active' : 'tab-inactive'
             }`}
           >
-            <span className="hidden sm:inline text-base leading-none">{t.icon}</span>
+            <span className="text-sm sm:text-base leading-none">{t.icon}</span>
             {t.label}
           </button>
         ))}
       </div>
 
       {/* Content */}
-      <main className="flex-1 p-5 overflow-x-auto">
+      <main className="flex-1 p-3 sm:p-5 overflow-x-auto">
         {renderTab()}
       </main>
     </div>

@@ -69,7 +69,12 @@ input[type=checkbox] { width: auto; }
   padding: 2px 0;
   max-width: 260px;
 }
-.card { background: #12121c; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 20px; }
+/* Hide scrollbar for tab bar on mobile */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+.card { background: #12121c; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 16px; }
+@media (min-width: 640px) { .card { padding: 20px; } }
 .label { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 5px; display: block; }
 .heat-card { background: #12121c; border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 12px 14px; transition: border-color 0.2s; }
 .heat-card.pending { border-left: 3px solid rgba(255,255,255,0.15); }
